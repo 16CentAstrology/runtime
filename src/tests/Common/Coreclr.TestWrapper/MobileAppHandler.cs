@@ -22,17 +22,17 @@ namespace CoreclrTestLib
         // 91 - ADB_FAILURE
         private static readonly int[] _knownExitCodes = new int[] { 78, 81, 82, 83, 84, 86, 88, 89, 90, 91 };
 
-        public int InstallMobileApp(string platform, string category, string testBinaryBase, string reportBase)
+        public int InstallMobileApp(string platform, string category, string testBinaryBase, string reportBase, string targetOS)
         {
-            return HandleMobileApp("install", platform, category, testBinaryBase, reportBase);
+            return HandleMobileApp("install", platform, category, testBinaryBase, reportBase, targetOS);
         }
 
-        public int UninstallMobileApp(string platform, string category, string testBinaryBase, string reportBase)
+        public int UninstallMobileApp(string platform, string category, string testBinaryBase, string reportBase, string targetOS)
         {
-            return HandleMobileApp("uninstall", platform, category, testBinaryBase, reportBase);
+            return HandleMobileApp("uninstall", platform, category, testBinaryBase, reportBase, targetOS);
         }
 
-        private static int HandleMobileApp(string action, string platform, string category, string testBinaryBase, string reportBase)
+        private static int HandleMobileApp(string action, string platform, string category, string testBinaryBase, string reportBase, string targetOS)
         {
             int exitCode = -100;
 
@@ -63,8 +63,8 @@ namespace CoreclrTestLib
                 if (platformValueFlag && actionValueFlag)
                 {
                     int timeout = 240000; // Set timeout to 4 mins, because the installation on Android arm64/32 devices could take up to 10 mins on CI
-                    string dotnetCmd_raw = System.Environment.GetEnvironmentVariable("__TestDotNetCmd");
-                    string xharnessCmd_raw = System.Environment.GetEnvironmentVariable("XHARNESS_CLI_PATH");
+                    string? dotnetCmd_raw = System.Environment.GetEnvironmentVariable("__TestDotNetCmd");
+                    string? xharnessCmd_raw = System.Environment.GetEnvironmentVariable("XHARNESS_CLI_PATH");
                     string dotnetCmd = string.IsNullOrEmpty(dotnetCmd_raw) ? "dotnet" : dotnetCmd_raw;
                     string xharnessCmd = string.IsNullOrEmpty(xharnessCmd_raw) ? "xharness" : $"exec {xharnessCmd_raw}";
                     string appExtension = platform == "android" ? "apk" : "app";
@@ -82,7 +82,24 @@ namespace CoreclrTestLib
                     }
                     else // platform is apple
                     {
-                        cmdStr += $" --output-directory={reportBase}/{action} --target=ios-simulator-64"; //To Do: target should be either emulator or device
+                        string targetString = "";
+
+                        switch (targetOS) {
+                            case "ios":
+                                targetString = "ios-device";
+                                break;
+                            case "iossimulator":
+                                targetString = "ios-simulator-64";
+                                break;
+                            case "tvos":
+                                targetString = "tvos-device";
+                                break;
+                            case "tvossimulator":
+                                targetString = "tvos-simulator";
+                                break;
+                        }
+
+                        cmdStr += $" --output-directory={reportBase}/{action} --target={targetString}";
 
                         if (action == "install")
                         {
@@ -177,9 +194,9 @@ namespace CoreclrTestLib
 
         private static void CreateRetryFile(string fileName, int exitCode, string appName)
         {
-            using (StreamWriter writer = new StreamWriter(fileName))  
+            using (StreamWriter writer = new StreamWriter(fileName))
             {
-                writer.WriteLine($"appName: {appName}; exitCode: {exitCode}"); 
+                writer.WriteLine($"appName: {appName}; exitCode: {exitCode}");
             }
         }
 

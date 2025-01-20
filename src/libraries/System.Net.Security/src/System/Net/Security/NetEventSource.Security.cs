@@ -11,7 +11,7 @@ using System.Security.Cryptography.X509Certificates;
 
 namespace System.Net
 {
-    [EventSource(Name = "Private.InternalDiagnostics.System.Net.Security", LocalizationResources = "FxResources.System.Net.Security.SR")]
+    [EventSource(Name = "Private.InternalDiagnostics.System.Net.Security")]
     internal sealed partial class NetEventSource
     {
 #if WINDOWS
@@ -42,6 +42,7 @@ namespace System.Net
         private const int SslStreamCtorId = RemoteCertificateInvalidId + 1;
         private const int SentFrameId = SslStreamCtorId + 1;
         private const int ReceivedFrameId = SentFrameId + 1;
+        private const int CertificateFromCertContextId = ReceivedFrameId + 1;
 
         [NonEvent]
         public void SslStreamCtor(SslStream sslStream, Stream innerStream)
@@ -188,6 +189,7 @@ namespace System.Net
         private void UsingCachedCredential(int sslStreamHash) =>
             WriteEvent(UsingCachedCredentialId, sslStreamHash);
 
+#pragma warning disable SYSLIB0058 // Use NegotiatedCipherSuite.
         [Event(SspiSelectedCipherSuitId, Keywords = Keywords.Default, Level = EventLevel.Informational)]
         public void SspiSelectedCipherSuite(
             string process,
@@ -203,6 +205,7 @@ namespace System.Net
                 process, (int)sslProtocol, (int)cipherAlgorithm, cipherStrength,
                 (int)hashAlgorithm, hashStrength, (int)keyExchangeAlgorithm, keyExchangeStrength);
         }
+#pragma warning restore SYSLIB0058 // Use NegotiatedCipherSuite.
 
         [NonEvent]
         public void RemoteCertificateError(SslStream SslStream, string message) =>
@@ -263,6 +266,14 @@ namespace System.Net
         [Event(ReceivedFrameId, Keywords = Keywords.Default, Level = EventLevel.Verbose)]
         private void ReceivedFrame(string sslStream, string tlsFrame, int isComplete) =>
             WriteEvent(ReceivedFrameId, sslStream, tlsFrame, isComplete);
+
+        [NonEvent]
+        public void CertificateFromCertContext(SslStream sslStream) =>
+            CertificateFromCertContext(GetHashCode(sslStream));
+
+        [Event(CertificateFromCertContextId, Keywords = Keywords.Default, Level = EventLevel.Informational)]
+        public void CertificateFromCertContext(int sslStreamHash) =>
+            WriteEvent(CertificateFromCertContextId, sslStreamHash);
 
         static partial void AdditionalCustomizedToString(object value, ref string? result)
         {

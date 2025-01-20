@@ -15,11 +15,11 @@ namespace System
         /// <param name="argument">The reference type argument to validate as non-null.</param>
         /// <param name="paramName">The name of the parameter with which <paramref name="argument"/> corresponds.</param>
         internal static void ThrowIfNull(
-#if NETCOREAPP3_0_OR_GREATER
+#if NET
             [NotNull]
 #endif
             object? argument,
-            [CallerArgumentExpression("argument")] string? paramName = null)
+            [CallerArgumentExpression(nameof(argument))] string? paramName = null)
         {
             if (argument is null)
             {
@@ -27,14 +27,14 @@ namespace System
             }
         }
 
-#if NETCOREAPP3_0_OR_GREATER
+#if NET
         [DoesNotReturn]
 #endif
         private static void Throw(string? paramName) => throw new ArgumentNullException(paramName);
     }
 }
 
-#if !NETCOREAPP3_0_OR_GREATER
+#if !NET
 namespace System.Runtime.CompilerServices
 {
     [AttributeUsage(AttributeTargets.Parameter, AllowMultiple = false, Inherited = false)]

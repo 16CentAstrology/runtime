@@ -86,8 +86,8 @@ namespace System.Text
         {
             ArgumentNullException.ThrowIfNull(chars);
 
-            if (index < 0 || count < 0)
-                throw new ArgumentOutOfRangeException(index < 0 ? nameof(index) : nameof(count), SR.ArgumentOutOfRange_NeedNonNegNum);
+            ArgumentOutOfRangeException.ThrowIfNegative(index);
+            ArgumentOutOfRangeException.ThrowIfNegative(count);
 
             if (chars.Length - index < count)
                 throw new ArgumentOutOfRangeException(nameof(chars), SR.ArgumentOutOfRange_IndexCountBuffer);
@@ -126,8 +126,7 @@ namespace System.Text
         {
             ArgumentNullException.ThrowIfNull(chars);
 
-            if (count < 0)
-                throw new ArgumentOutOfRangeException(nameof(count), SR.ArgumentOutOfRange_NeedNonNegNum);
+            ArgumentOutOfRangeException.ThrowIfNegative(count);
 
             // Call it with empty encoder
             return GetByteCount(chars, count, null);
@@ -144,8 +143,8 @@ namespace System.Text
             ArgumentNullException.ThrowIfNull(s);
             ArgumentNullException.ThrowIfNull(bytes);
 
-            if (charIndex < 0 || charCount < 0)
-                throw new ArgumentOutOfRangeException(charIndex < 0 ? nameof(charIndex) : nameof(charCount), SR.ArgumentOutOfRange_NeedNonNegNum);
+            ArgumentOutOfRangeException.ThrowIfNegative(charIndex);
+            ArgumentOutOfRangeException.ThrowIfNegative(charCount);
 
             if (s.Length - charIndex < charCount)
                 throw new ArgumentOutOfRangeException(nameof(s), SR.ArgumentOutOfRange_IndexCount);
@@ -155,8 +154,11 @@ namespace System.Text
 
             int byteCount = bytes.Length - byteIndex;
 
-            fixed (char* pChars = s) fixed (byte* pBytes = &MemoryMarshal.GetReference((Span<byte>)bytes))
+            fixed (char* pChars = s)
+            fixed (byte* pBytes = &MemoryMarshal.GetArrayDataReference(bytes))
+            {
                 return GetBytes(pChars + charIndex, charCount, pBytes + byteIndex, byteCount, null);
+            }
         }
 
         // Encodes a range of characters in a character array into a range of bytes
@@ -179,8 +181,8 @@ namespace System.Text
             ArgumentNullException.ThrowIfNull(chars);
             ArgumentNullException.ThrowIfNull(bytes);
 
-            if (charIndex < 0 || charCount < 0)
-                throw new ArgumentOutOfRangeException(charIndex < 0 ? nameof(charIndex) : nameof(charCount), SR.ArgumentOutOfRange_NeedNonNegNum);
+            ArgumentOutOfRangeException.ThrowIfNegative(charIndex);
+            ArgumentOutOfRangeException.ThrowIfNegative(charCount);
 
             if (chars.Length - charIndex < charCount)
                 throw new ArgumentOutOfRangeException(nameof(chars), SR.ArgumentOutOfRange_IndexCountBuffer);
@@ -195,9 +197,12 @@ namespace System.Text
             // Just call pointer version
             int byteCount = bytes.Length - byteIndex;
 
-            fixed (char* pChars = chars) fixed (byte* pBytes = &MemoryMarshal.GetReference((Span<byte>)bytes))
+            fixed (char* pChars = chars)
+            fixed (byte* pBytes = &MemoryMarshal.GetArrayDataReference(bytes))
+            {
                 // Remember that byteCount is # to decode, not size of array.
                 return GetBytes(pChars + charIndex, charCount, pBytes + byteIndex, byteCount, null);
+            }
         }
 
         // All of our public Encodings that don't use EncodingNLS must have this (including EncodingNLS)
@@ -210,8 +215,8 @@ namespace System.Text
             ArgumentNullException.ThrowIfNull(chars);
             ArgumentNullException.ThrowIfNull(bytes);
 
-            if (charCount < 0 || byteCount < 0)
-                throw new ArgumentOutOfRangeException(charCount < 0 ? nameof(charCount) : nameof(byteCount), SR.ArgumentOutOfRange_NeedNonNegNum);
+            ArgumentOutOfRangeException.ThrowIfNegative(charCount);
+            ArgumentOutOfRangeException.ThrowIfNegative(byteCount);
 
             return GetBytes(chars, charCount, bytes, byteCount, null);
         }
@@ -228,8 +233,8 @@ namespace System.Text
         {
             ArgumentNullException.ThrowIfNull(bytes);
 
-            if (index < 0 || count < 0)
-                throw new ArgumentOutOfRangeException(index < 0 ? nameof(index) : nameof(count), SR.ArgumentOutOfRange_NeedNonNegNum);
+            ArgumentOutOfRangeException.ThrowIfNegative(index);
+            ArgumentOutOfRangeException.ThrowIfNegative(count);
 
             if (bytes.Length - index < count)
                 throw new ArgumentOutOfRangeException(nameof(bytes), SR.ArgumentOutOfRange_IndexCountBuffer);
@@ -252,8 +257,7 @@ namespace System.Text
         {
             ArgumentNullException.ThrowIfNull(bytes);
 
-            if (count < 0)
-                throw new ArgumentOutOfRangeException(nameof(count), SR.ArgumentOutOfRange_NeedNonNegNum);
+            ArgumentOutOfRangeException.ThrowIfNegative(count);
 
             return GetCharCount(bytes, count, null);
         }
@@ -269,8 +273,8 @@ namespace System.Text
             ArgumentNullException.ThrowIfNull(bytes);
             ArgumentNullException.ThrowIfNull(chars);
 
-            if (byteIndex < 0 || byteCount < 0)
-                throw new ArgumentOutOfRangeException(byteIndex < 0 ? nameof(byteIndex) : nameof(byteCount), SR.ArgumentOutOfRange_NeedNonNegNum);
+            ArgumentOutOfRangeException.ThrowIfNegative(byteIndex);
+            ArgumentOutOfRangeException.ThrowIfNegative(byteCount);
 
             if (bytes.Length - byteIndex < byteCount)
                 throw new ArgumentOutOfRangeException(nameof(bytes), SR.ArgumentOutOfRange_IndexCountBuffer);
@@ -285,9 +289,12 @@ namespace System.Text
             // Just call pointer version
             int charCount = chars.Length - charIndex;
 
-            fixed (byte* pBytes = bytes) fixed (char* pChars = &MemoryMarshal.GetReference((Span<char>)chars))
+            fixed (byte* pBytes = bytes)
+            fixed (char* pChars = &MemoryMarshal.GetArrayDataReference(chars))
+            {
                 // Remember that charCount is # to decode, not size of array
                 return GetChars(pBytes + byteIndex, byteCount, pChars + charIndex, charCount, null);
+            }
         }
 
         // All of our public Encodings that don't use EncodingNLS must have this (including EncodingNLS)
@@ -300,8 +307,8 @@ namespace System.Text
             ArgumentNullException.ThrowIfNull(bytes);
             ArgumentNullException.ThrowIfNull(chars);
 
-            if (charCount < 0 || byteCount < 0)
-                throw new ArgumentOutOfRangeException(charCount < 0 ? nameof(charCount) : nameof(byteCount), SR.ArgumentOutOfRange_NeedNonNegNum);
+            ArgumentOutOfRangeException.ThrowIfNegative(charCount);
+            ArgumentOutOfRangeException.ThrowIfNegative(byteCount);
 
             return GetChars(bytes, byteCount, chars, charCount, null);
         }
@@ -318,8 +325,8 @@ namespace System.Text
         {
             ArgumentNullException.ThrowIfNull(bytes);
 
-            if (index < 0 || count < 0)
-                throw new ArgumentOutOfRangeException(index < 0 ? nameof(index) : nameof(count), SR.ArgumentOutOfRange_NeedNonNegNum);
+            ArgumentOutOfRangeException.ThrowIfNegative(index);
+            ArgumentOutOfRangeException.ThrowIfNegative(count);
 
             if (bytes.Length - index < count)
                 throw new ArgumentOutOfRangeException(nameof(bytes), SR.ArgumentOutOfRange_IndexCountBuffer);
@@ -736,7 +743,7 @@ namespace System.Text
                             // else all < 0x8000 so we can use them
 
                             // We can use these 4 chars.
-                            Unsafe.WriteUnaligned<ulong>(longBytes, *longChars);
+                            Unsafe.WriteUnaligned(longBytes, *longChars);
                             longChars++;
                             longBytes++;
                         }
@@ -980,7 +987,7 @@ namespace System.Text
             Debug.Assert(bytes is not null, "[UnicodeEncoding.GetCharCount]bytes!=null");
             Debug.Assert(count >= 0, "[UnicodeEncoding.GetCharCount]count >=0");
 
-            UnicodeEncoding.Decoder? decoder = (UnicodeEncoding.Decoder?)baseDecoder;
+            Decoder? decoder = (Decoder?)baseDecoder;
 
             byte* byteEnd = bytes + count;
             byte* byteStart = bytes;
@@ -1126,13 +1133,11 @@ namespace System.Text
                             byte[]? byteBuffer = null;
                             if (bigEndian)
                             {
-                                byteBuffer = new byte[]
-                                    { unchecked((byte)(lastChar >> 8)), unchecked((byte)lastChar) };
+                                byteBuffer = [unchecked((byte)(lastChar >> 8)), unchecked((byte)lastChar)];
                             }
                             else
                             {
-                                byteBuffer = new byte[]
-                                    { unchecked((byte)lastChar), unchecked((byte)(lastChar >> 8)) };
+                                byteBuffer = [unchecked((byte)lastChar), unchecked((byte)(lastChar >> 8))];
                             }
 
                             if (fallbackBuffer is null)
@@ -1166,13 +1171,11 @@ namespace System.Text
                         byte[]? byteBuffer = null;
                         if (bigEndian)
                         {
-                            byteBuffer = new byte[]
-                                { unchecked((byte)(ch >> 8)), unchecked((byte)ch) };
+                            byteBuffer = [unchecked((byte)(ch >> 8)), unchecked((byte)ch)];
                         }
                         else
                         {
-                            byteBuffer = new byte[]
-                                { unchecked((byte)ch), unchecked((byte)(ch >> 8)) };
+                            byteBuffer = [unchecked((byte)ch), unchecked((byte)(ch >> 8))];
                         }
 
                         if (fallbackBuffer is null)
@@ -1204,13 +1207,11 @@ namespace System.Text
                     byte[]? byteBuffer = null;
                     if (bigEndian)
                     {
-                        byteBuffer = new byte[]
-                            { unchecked((byte)(lastChar >> 8)), unchecked((byte)lastChar) };
+                        byteBuffer = [unchecked((byte)(lastChar >> 8)), unchecked((byte)lastChar)];
                     }
                     else
                     {
-                        byteBuffer = new byte[]
-                            { unchecked((byte)lastChar), unchecked((byte)(lastChar >> 8)) };
+                        byteBuffer = [unchecked((byte)lastChar), unchecked((byte)(lastChar >> 8))];
                     }
 
                     if (fallbackBuffer is null)
@@ -1243,13 +1244,11 @@ namespace System.Text
                     byte[]? byteBuffer = null;
                     if (bigEndian)
                     {
-                        byteBuffer = new byte[]
-                            { unchecked((byte)(lastChar >> 8)), unchecked((byte)lastChar) };
+                        byteBuffer = [unchecked((byte)(lastChar >> 8)), unchecked((byte)lastChar)];
                     }
                     else
                     {
-                        byteBuffer = new byte[]
-                            { unchecked((byte)lastChar), unchecked((byte)(lastChar >> 8)) };
+                        byteBuffer = [unchecked((byte)lastChar), unchecked((byte)(lastChar >> 8))];
                     }
 
                     if (fallbackBuffer is null)
@@ -1280,7 +1279,7 @@ namespace System.Text
                     }
 
                     // No hanging odd bytes allowed if must flush
-                    charCount += fallbackBuffer.InternalFallback(new byte[] { unchecked((byte)lastByte) }, bytes);
+                    charCount += fallbackBuffer.InternalFallback([unchecked((byte)lastByte)], bytes);
                     lastByte = -1;
                 }
             }
@@ -1305,7 +1304,7 @@ namespace System.Text
             Debug.Assert(charCount >= 0, "[UnicodeEncoding.GetChars]charCount >=0");
             Debug.Assert(bytes is not null, "[UnicodeEncoding.GetChars]bytes!=null");
 
-            UnicodeEncoding.Decoder? decoder = (UnicodeEncoding.Decoder?)baseDecoder;
+            Decoder? decoder = (Decoder?)baseDecoder;
 
             // Need last vars
             int lastByte = -1;
@@ -1400,7 +1399,7 @@ namespace System.Text
                         // else all < 0x8000 so we can use them
 
                         // We can use these 4 chars.
-                        Unsafe.WriteUnaligned<ulong>(longChars, *longBytes);
+                        Unsafe.WriteUnaligned(longChars, *longBytes);
                         longBytes++;
                         longChars++;
                     }
@@ -1446,13 +1445,11 @@ namespace System.Text
                             byte[]? byteBuffer = null;
                             if (bigEndian)
                             {
-                                byteBuffer = new byte[]
-                                    { unchecked((byte)(lastChar >> 8)), unchecked((byte)lastChar) };
+                                byteBuffer = [unchecked((byte)(lastChar >> 8)), unchecked((byte)lastChar)];
                             }
                             else
                             {
-                                byteBuffer = new byte[]
-                                    { unchecked((byte)lastChar), unchecked((byte)(lastChar >> 8)) };
+                                byteBuffer = [unchecked((byte)lastChar), unchecked((byte)(lastChar >> 8))];
                             }
 
                             if (fallbackBuffer is null)
@@ -1497,13 +1494,11 @@ namespace System.Text
                         byte[]? byteBuffer = null;
                         if (bigEndian)
                         {
-                            byteBuffer = new byte[]
-                                { unchecked((byte)(ch >> 8)), unchecked((byte)ch) };
+                            byteBuffer = [unchecked((byte)(ch >> 8)), unchecked((byte)ch)];
                         }
                         else
                         {
-                            byteBuffer = new byte[]
-                                { unchecked((byte)ch), unchecked((byte)(ch >> 8)) };
+                            byteBuffer = [unchecked((byte)ch), unchecked((byte)(ch >> 8))];
                         }
 
                         if (fallbackBuffer is null)
@@ -1537,7 +1532,7 @@ namespace System.Text
                     }
 
                     // Valid surrogate pair, add our lastChar (will need 2 chars)
-                    if (chars >= charEnd - 1)
+                    if (charEnd - chars < 2)
                     {
                         // couldn't find room for this surrogate pair
                         // We either advanced bytes or chars should == charStart and throw below
@@ -1558,13 +1553,11 @@ namespace System.Text
                     byte[]? byteBuffer = null;
                     if (bigEndian)
                     {
-                        byteBuffer = new byte[]
-                            { unchecked((byte)(lastChar >> 8)), unchecked((byte)lastChar) };
+                        byteBuffer = [unchecked((byte)(lastChar >> 8)), unchecked((byte)lastChar)];
                     }
                     else
                     {
-                        byteBuffer = new byte[]
-                            { unchecked((byte)lastChar), unchecked((byte)(lastChar >> 8)) };
+                        byteBuffer = [unchecked((byte)lastChar), unchecked((byte)(lastChar >> 8))];
                     }
 
                     if (fallbackBuffer is null)
@@ -1622,13 +1615,11 @@ namespace System.Text
                     byte[]? byteBuffer = null;
                     if (bigEndian)
                     {
-                        byteBuffer = new byte[]
-                            { unchecked((byte)(lastChar >> 8)), unchecked((byte)lastChar) };
+                        byteBuffer = [unchecked((byte)(lastChar >> 8)), unchecked((byte)lastChar)];
                     }
                     else
                     {
-                        byteBuffer = new byte[]
-                            { unchecked((byte)lastChar), unchecked((byte)(lastChar >> 8)) };
+                        byteBuffer = [unchecked((byte)lastChar), unchecked((byte)(lastChar >> 8))];
                     }
 
                     if (fallbackBuffer is null)
@@ -1681,7 +1672,7 @@ namespace System.Text
 
                     // No hanging odd bytes allowed if must flush
                     charsForFallback = chars; // Avoid passing chars by reference to allow it to be en-registered
-                    bool fallbackResult = fallbackBuffer.InternalFallback(new byte[] { unchecked((byte)lastByte) }, bytes, ref charsForFallback);
+                    bool fallbackResult = fallbackBuffer.InternalFallback([unchecked((byte)lastByte)], bytes, ref charsForFallback);
                     chars = charsForFallback;
 
                     if (!fallbackResult)
@@ -1721,14 +1712,14 @@ namespace System.Text
             return (int)(chars - charStart);
         }
 
-        public override System.Text.Encoder GetEncoder()
+        public override Encoder GetEncoder()
         {
             return new EncoderNLS(this);
         }
 
-        public override System.Text.Decoder GetDecoder()
+        public override Text.Decoder GetDecoder()
         {
-            return new UnicodeEncoding.Decoder(this);
+            return new Decoder(this);
         }
 
         public override byte[] GetPreamble()
@@ -1738,9 +1729,9 @@ namespace System.Text
                 // Note - we must allocate new byte[]'s here to prevent someone
                 // from modifying a cached byte[].
                 if (bigEndian)
-                    return new byte[2] { 0xfe, 0xff };
+                    return [0xfe, 0xff];
                 else
-                    return new byte[2] { 0xff, 0xfe };
+                    return [0xff, 0xfe];
             }
             return Array.Empty<byte>();
         }
@@ -1748,14 +1739,12 @@ namespace System.Text
         public override ReadOnlySpan<byte> Preamble =>
             GetType() != typeof(UnicodeEncoding) ? new ReadOnlySpan<byte>(GetPreamble()) : // in case a derived UnicodeEncoding overrode GetPreamble
             !byteOrderMark ? default :
-            bigEndian ? (ReadOnlySpan<byte>)new byte[2] { 0xfe, 0xff } : // uses C# compiler's optimization for static byte[] data
-            (ReadOnlySpan<byte>)new byte[2] { 0xff, 0xfe };
+            bigEndian ? [0xfe, 0xff] :
+            [0xff, 0xfe];
 
         public override int GetMaxByteCount(int charCount)
         {
-            if (charCount < 0)
-                throw new ArgumentOutOfRangeException(nameof(charCount),
-                     SR.ArgumentOutOfRange_NeedNonNegNum);
+            ArgumentOutOfRangeException.ThrowIfNegative(charCount);
 
             // Characters would be # of characters + 1 in case left over high surrogate is ? * max fallback
             long byteCount = (long)charCount + 1;
@@ -1774,9 +1763,7 @@ namespace System.Text
 
         public override int GetMaxCharCount(int byteCount)
         {
-            if (byteCount < 0)
-                throw new ArgumentOutOfRangeException(nameof(byteCount),
-                     SR.ArgumentOutOfRange_NeedNonNegNum);
+            ArgumentOutOfRangeException.ThrowIfNegative(byteCount);
 
             // long because byteCount could be biggest int.
             // 1 char per 2 bytes.  Round up in case 1 left over in decoder.
@@ -1818,7 +1805,7 @@ namespace System.Text
                    (byteOrderMark ? 4 : 0) + (bigEndian ? 8 : 0);
         }
 
-        private sealed class Decoder : System.Text.DecoderNLS
+        private sealed class Decoder : DecoderNLS
         {
             internal int lastByte = -1;
             internal char lastChar;

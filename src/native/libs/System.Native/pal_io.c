@@ -10,8 +10,8 @@
 #include "pal_types.h"
 
 #include <assert.h>
-#include <errno.h>
 #include <fcntl.h>
+#include <errno.h>
 #include <fnmatch.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,8 +26,12 @@
 #include <sys/sysmacros.h>
 #endif
 #include <sys/uio.h>
+#if HAVE_SYSLOG_H
 #include <syslog.h>
+#endif
+#if HAVE_TERMIOS_H
 #include <termios.h>
+#endif
 #include <unistd.h>
 #include <limits.h>
 #if HAVE_FCOPYFILE
@@ -42,10 +46,16 @@
 #include <sys/vfs.h>
 #elif HAVE_STATFS_MOUNT // BSD
 #include <sys/mount.h>
-#elif !HAVE_NON_LEGACY_STATFS // SunOS
+#elif HAVE_SYS_STATVFS_H && !HAVE_NON_LEGACY_STATFS // SunOS
 #include <sys/types.h>
 #include <sys/statvfs.h>
+#if HAVE_STATFS_VFS
 #include <sys/vfs.h>
+#endif
+#endif
+
+#ifdef TARGET_SUNOS
+#include <sys/param.h>
 #endif
 
 #ifdef _AIX
@@ -53,15 +63,10 @@
 // Somehow, AIX mangles the definition for this behind a C++ def
 // Redeclare it here
 extern int     getpeereid(int, uid_t *__restrict__, gid_t *__restrict__);
-#elif defined(TARGET_SUNOS)
-#ifndef _KERNEL
-#define _KERNEL
-#define UNDEF_KERNEL
 #endif
-#include <sys/procfs.h>
-#ifdef UNDEF_KERNEL
-#undef _KERNEL
-#endif
+
+#if defined(TARGET_SUNOS)
+#include <procfs.h>
 #endif
 
 #ifdef __linux__
@@ -70,7 +75,7 @@ extern int     getpeereid(int, uid_t *__restrict__, gid_t *__restrict__);
 // Ensure FICLONE is defined for all Linux builds.
 #ifndef FICLONE
 #define FICLONE _IOW(0x94, 9, int)
-#endif
+#endif /* __linux__ */
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wreserved-id-macro"
@@ -97,11 +102,11 @@ extern int     getpeereid(int, uid_t *__restrict__, gid_t *__restrict__);
 #define stat_ stat64
 #define fstat_ fstat64
 #define lstat_ lstat64
-#else
+#else /* HAVE_STAT64 */
 #define stat_ stat
 #define fstat_ fstat
 #define lstat_ lstat
-#endif
+#endif  /* HAVE_STAT64 */
 
 // These numeric values are specified by POSIX.
 // Validate that our definitions match.
@@ -124,8 +129,10 @@ c_static_assert(PAL_S_ISGID == S_ISGID);
 // are common to our current targets.  If these static asserts fail,
 // ConvertFileStatus needs to be updated to twiddle mode bits
 // accordingly.
+#if !defined(TARGET_WASI)
 c_static_assert(PAL_S_IFMT == S_IFMT);
 c_static_assert(PAL_S_IFIFO == S_IFIFO);
+#endif /* TARGET_WASI */
 c_static_assert(PAL_S_IFBLK == S_IFBLK);
 c_static_assert(PAL_S_IFCHR == S_IFCHR);
 c_static_assert(PAL_S_IFDIR == S_IFDIR);
@@ -139,7 +146,7 @@ c_static_assert(PAL_S_IFSOCK == S_IFSOCK);
 // WebAssembly (BROWSER) has dirent d_type but is not correct
 // by returning UNKNOWN the managed code properly stats the file
 // to detect if entry is directory or not.
-#if defined(DT_UNKNOWN) || defined(TARGET_WASM)
+#if (defined(DT_UNKNOWN) || defined(TARGET_WASM)) && !defined(TARGET_WASI)
 c_static_assert((int)PAL_DT_UNKNOWN == (int)DT_UNKNOWN);
 c_static_assert((int)PAL_DT_FIFO == (int)DT_FIFO);
 c_static_assert((int)PAL_DT_CHR == (int)DT_CHR);
@@ -283,7 +290,7 @@ static int32_t ConvertOpenFlags(int32_t flags)
             return -1;
     }
 
-    if (flags & ~(PAL_O_ACCESS_MODE_MASK | PAL_O_CLOEXEC | PAL_O_CREAT | PAL_O_EXCL | PAL_O_TRUNC | PAL_O_SYNC))
+    if (flags & ~(PAL_O_ACCESS_MODE_MASK | PAL_O_CLOEXEC | PAL_O_CREAT | PAL_O_EXCL | PAL_O_TRUNC | PAL_O_SYNC | PAL_O_NOFOLLOW))
     {
         assert_msg(false, "Unknown Open flag", (int)flags);
         return -1;
@@ -301,6 +308,8 @@ static int32_t ConvertOpenFlags(int32_t flags)
         ret |= O_TRUNC;
     if (flags & PAL_O_SYNC)
         ret |= O_SYNC;
+    if (flags & PAL_O_NOFOLLOW)
+        ret |= O_NOFOLLOW;
 
     assert(ret != -1);
     return ret;
@@ -341,10 +350,14 @@ intptr_t SystemNative_Dup(intptr_t oldfd)
     int result;
 #if HAVE_F_DUPFD_CLOEXEC
     while ((result = fcntl(ToFileDescriptor(oldfd), F_DUPFD_CLOEXEC, 0)) < 0 && errno == EINTR);
-#else
+#elif HAVE_F_DUPFD
     while ((result = fcntl(ToFileDescriptor(oldfd), F_DUPFD, 0)) < 0 && errno == EINTR);
     // do CLOEXEC here too
     fcntl(result, F_SETFD, FD_CLOEXEC);
+#else
+    // The main use cases for dup are setting up the classic Unix dance of setting up file descriptors in advance of performing a fork. Since WASI has no fork, these don't apply.
+    // https://github.com/bytecodealliance/wasmtime/blob/b2fefe77148582a9b8013e34fe5808ada82b6efc/docs/WASI-rationale.md#why-no-dup
+    result = oldfd;
 #endif
     return result;
 }
@@ -354,6 +367,72 @@ int32_t SystemNative_Unlink(const char* path)
     int32_t result;
     while ((result = unlink(path)) < 0 && errno == EINTR);
     return result;
+}
+
+#ifdef __NR_memfd_create
+#ifndef MFD_CLOEXEC
+#define MFD_CLOEXEC 0x0001U
+#endif
+#ifndef MFD_ALLOW_SEALING
+#define MFD_ALLOW_SEALING 0x0002U
+#endif
+#ifndef F_ADD_SEALS
+#define F_ADD_SEALS (1024 + 9)
+#endif
+#ifndef F_SEAL_WRITE
+#define F_SEAL_WRITE 0x0008
+#endif
+#endif
+
+int32_t SystemNative_IsMemfdSupported(void)
+{
+#ifdef __NR_memfd_create
+#ifdef TARGET_LINUX
+    struct utsname uts;
+    int32_t major, minor;
+
+    // memfd_create is known to only work properly on kernel version > 3.17.
+    // On earlier versions, it may raise SIGSEGV instead of returning ENOTSUP.
+    if (uname(&uts) == 0 && sscanf(uts.release, "%d.%d", &major, &minor) == 2 && (major < 3 || (major == 3 && minor < 17)))
+    {
+        return 0;
+    }
+#endif
+
+    // Note that the name has no affect on file descriptor behavior. From linux manpage: 
+    //   Names do not affect the behavior of the file descriptor, and as such multiple files can have the same name without any side effects.
+    int32_t fd = (int32_t)syscall(__NR_memfd_create, "test", MFD_CLOEXEC | MFD_ALLOW_SEALING);
+    if (fd < 0) return 0;
+
+    close(fd);
+    return 1;
+#else
+    errno = ENOTSUP;
+    return 0;
+#endif
+}
+
+intptr_t SystemNative_MemfdCreate(const char* name, int32_t isReadonly)
+{
+#ifdef __NR_memfd_create
+#if defined(SHM_NAME_MAX) // macOS
+    assert(strlen(name) <= SHM_NAME_MAX);
+#elif defined(PATH_MAX) // other Unixes
+    assert(strlen(name) <= PATH_MAX);
+#endif
+
+    int32_t fd = (int32_t)syscall(__NR_memfd_create, name, MFD_CLOEXEC | MFD_ALLOW_SEALING);
+    if (!isReadonly || fd < 0) return fd;
+
+    // Add a write seal when readonly protection requested
+    while (fcntl(fd, F_ADD_SEALS, F_SEAL_WRITE) < 0 && errno == EINTR);
+    return fd;
+#else
+    (void)name;
+    (void)isReadonly;
+    errno = ENOTSUP;
+    return -1;
+#endif
 }
 
 intptr_t SystemNative_ShmOpen(const char* name, int32_t flags, int32_t mode)
@@ -427,10 +506,17 @@ static const size_t dirent_alignment = 8;
 int32_t SystemNative_GetReadDirRBufferSize(void)
 {
 #if HAVE_READDIR_R
+    size_t result = sizeof(struct dirent);
+#ifdef TARGET_SUNOS
+    // The d_name array is declared with only a single byte in it.
+    // We have to add pathconf("dir", _PC_NAME_MAX) more bytes.
+    // MAXNAMELEN is the largest possible value returned from pathconf.
+    result += MAXNAMELEN;
+#endif
     // dirent should be under 2k in size
-    assert(sizeof(struct dirent) < 2048);
+    assert(result < 2048);
     // add some extra space so we can align the buffer to dirent.
-    return sizeof(struct dirent) + dirent_alignment - 1;
+    return (int32_t)(result + dirent_alignment - 1);
 #else
     return 0;
 #endif
@@ -570,7 +656,7 @@ int32_t SystemNative_Pipe(int32_t pipeFds[2], int32_t flags)
 #if HAVE_PIPE2
     // If pipe2 is available, use it.  This will handle O_CLOEXEC if it was set.
     while ((result = pipe2(pipeFds, flags)) < 0 && errno == EINTR);
-#else
+#elif HAVE_PIPE
     // Otherwise, use pipe.
     while ((result = pipe(pipeFds)) < 0 && errno == EINTR);
 
@@ -595,7 +681,9 @@ int32_t SystemNative_Pipe(int32_t pipeFds[2], int32_t flags)
             errno = tmpErrno;
         }
     }
-#endif
+#else /* HAVE_PIPE */
+    result = -1;
+#endif /* HAVE_PIPE */
     return result;
 }
 
@@ -695,16 +783,28 @@ int32_t SystemNative_MkDir(const char* path, int32_t mode)
 
 int32_t SystemNative_ChMod(const char* path, int32_t mode)
 {
+#if HAVE_CHMOD
     int32_t result;
     while ((result = chmod(path, (mode_t)mode)) < 0 && errno == EINTR);
     return result;
+#else /* HAVE_CHMOD */
+    (void)path; // unused
+    (void)mode; // unused
+    return EINTR;
+#endif /* HAVE_CHMOD */
 }
 
 int32_t SystemNative_FChMod(intptr_t fd, int32_t mode)
 {
+#if HAVE_FCHMOD
     int32_t result;
     while ((result = fchmod(ToFileDescriptor(fd), (mode_t)mode)) < 0 && errno == EINTR);
     return result;
+#else /* HAVE_FCHMOD */
+    (void)fd; // unused
+    (void)mode; // unused
+    return EINTR;
+#endif /* HAVE_FCHMOD */
 }
 
 int32_t SystemNative_FSync(intptr_t fd)
@@ -725,7 +825,11 @@ int32_t SystemNative_FSync(intptr_t fd)
 int32_t SystemNative_FLock(intptr_t fd, int32_t operation)
 {
     int32_t result;
+#if !defined(TARGET_WASI)
     while ((result = flock(ToFileDescriptor(fd), operation)) < 0 && errno == EINTR);
+#else /* TARGET_WASI */
+    result = EINTR;
+#endif /* TARGET_WASI */
     return result;
 }
 
@@ -748,12 +852,15 @@ int64_t SystemNative_LSeek(intptr_t fd, int64_t offset, int32_t whence)
         result =
 #if HAVE_LSEEK64
             lseek64(
-#else
-            lseek(
-#endif
                  ToFileDescriptor(fd),
                  (off_t)offset,
                  whence)) < 0 && errno == EINTR);
+#else
+            lseek(
+                 ToFileDescriptor(fd),
+                 (off_t)offset,
+                 whence)) < 0 && errno == EINTR);
+#endif
     return result;
 }
 
@@ -773,32 +880,50 @@ int32_t SystemNative_SymLink(const char* target, const char* linkPath)
 
 void SystemNative_GetDeviceIdentifiers(uint64_t dev, uint32_t* majorNumber, uint32_t* minorNumber)
 {
+#if !defined(TARGET_WASI)
     dev_t castedDev = (dev_t)dev;
     *majorNumber = (uint32_t)major(castedDev);
     *minorNumber = (uint32_t)minor(castedDev);
+#else /* TARGET_WASI */
+    dev_t castedDev = (dev_t)dev;
+    *majorNumber = 0;
+    *minorNumber = 0;
+#endif /* TARGET_WASI */
 }
 
 int32_t SystemNative_MkNod(const char* pathName, uint32_t mode, uint32_t major, uint32_t minor)
 {
+#if !defined(TARGET_WASI)
     dev_t dev = (dev_t)makedev(major, minor);
 
     int32_t result;
     while ((result = mknod(pathName, (mode_t)mode, dev)) < 0 && errno == EINTR);
     return result;
+#else /* TARGET_WASI */
+    return EINTR;
+#endif /* TARGET_WASI */
 }
 
 int32_t SystemNative_MkFifo(const char* pathName, uint32_t mode)
 {
+#if !defined(TARGET_WASI)
     int32_t result;
     while ((result = mkfifo(pathName, (mode_t)mode)) < 0 && errno == EINTR);
     return result;
+#else /* TARGET_WASI */
+    return EINTR;
+#endif /* TARGET_WASI */
 }
 
 char* SystemNative_MkdTemp(char* pathTemplate)
 {
+#if !defined(TARGET_WASI)
     char* result = NULL;
     while ((result = mkdtemp(pathTemplate)) == NULL && errno == EINTR);
     return result;
+#else /* TARGET_WASI */
+    return NULL;
+#endif /* TARGET_WASI */
 }
 
 intptr_t SystemNative_MksTemps(char* pathTemplate, int32_t suffixLength)
@@ -840,6 +965,9 @@ intptr_t SystemNative_MksTemps(char* pathTemplate, int32_t suffixLength)
     {
         pathTemplate[firstSuffixIndex] = firstSuffixChar;
     }
+#elif TARGET_WASI
+    assert_msg(false, "Not supported on WASI", 0);
+    result = -1;
 #else
 #error "Cannot find mkstemps nor mkstemp on this platform"
 #endif
@@ -965,6 +1093,19 @@ int32_t SystemNative_MUnmap(void* address, uint64_t length)
     return munmap(address, (size_t)length);
 }
 
+int32_t SystemNative_MProtect(void* address, uint64_t length, int32_t protection)
+{
+    if (length > SIZE_MAX)
+    {
+        errno =  ERANGE;
+        return -1;
+    }
+
+    protection = ConvertMMapProtection(protection);
+
+    return mprotect(address, (size_t)length, protection);
+}
+
 int32_t SystemNative_MAdvise(void* address, uint64_t length, int32_t advice)
 {
     if (length > SIZE_MAX)
@@ -976,13 +1117,15 @@ int32_t SystemNative_MAdvise(void* address, uint64_t length, int32_t advice)
     switch (advice)
     {
         case PAL_MADV_DONTFORK:
-#ifdef MADV_DONTFORK
+#if defined(MADV_DONTFORK) && !defined(TARGET_WASI)
             return madvise(address, (size_t)length, MADV_DONTFORK);
 #else
             (void)address, (void)length, (void)advice;
             errno = ENOTSUP;
             return -1;
 #endif
+        default:
+            break; // fall through to error
     }
 
     assert_msg(false, "Unknown MemoryAdvice", (int)advice);
@@ -1005,7 +1148,11 @@ int32_t SystemNative_MSync(void* address, uint64_t length, int32_t flags)
         return -1;
     }
 
+#if !defined(TARGET_WASI)
     return msync(address, (size_t)length, flags);
+#else
+    return -1;
+#endif
 }
 
 int64_t SystemNative_SysConf(int32_t name)
@@ -1016,6 +1163,8 @@ int64_t SystemNative_SysConf(int32_t name)
             return sysconf(_SC_CLK_TCK);
         case PAL_SC_PAGESIZE:
             return sysconf(_SC_PAGESIZE);
+        default:
+            break; // fall through to error
     }
 
     assert_msg(false, "Unknown SysConf name", (int)name);
@@ -1145,7 +1294,9 @@ int32_t SystemNative_RmDir(const char* path)
 
 void SystemNative_Sync(void)
 {
+#if !defined(TARGET_WASI)
     sync();
+#endif /* TARGET_WASI */
 }
 
 int32_t SystemNative_Write(intptr_t fd, const void* buffer, int32_t bufferSize)
@@ -1267,7 +1418,11 @@ int32_t SystemNative_CopyFile(intptr_t sourceFd, intptr_t destinationFd, int64_t
     // Try copying data using a copy-on-write clone. This shares storage between the files.
     if (sourceLength != 0)
     {
+#if HAVE_IOCTL_WITH_INT_REQUEST
+        while ((ret = ioctl(outFd, (int)FICLONE, inFd)) < 0 && errno == EINTR);
+#else
         while ((ret = ioctl(outFd, FICLONE, inFd)) < 0 && errno == EINTR);
+#endif
         copied = ret == 0;
     }
 #endif
@@ -1369,6 +1524,7 @@ int32_t SystemNative_CopyFile(intptr_t sourceFd, intptr_t destinationFd, int64_t
         return -1;
     }
 
+#if HAVE_FCHMOD
     // Copy permissions.
     // Even though managed code created the file with permissions matching those of the source file,
     // we need to copy permissions because the open permissions may be filtered by 'umask'.
@@ -1377,6 +1533,7 @@ int32_t SystemNative_CopyFile(intptr_t sourceFd, intptr_t destinationFd, int64_t
     {
         return -1;
     }
+#endif /* HAVE_FCHMOD */
 
     return 0;
 #endif // HAVE_FCOPYFILE
@@ -1458,9 +1615,14 @@ int32_t SystemNative_GetPeerID(intptr_t socket, uid_t* euid)
 char* SystemNative_RealPath(const char* path)
 {
     assert(path != NULL);
+#if !defined(TARGET_WASI)
     return realpath(path, NULL);
+#else /* TARGET_WASI */
+    return NULL;
+#endif /* TARGET_WASI */
 }
 
+#if !defined(TARGET_WASI)
 static int16_t ConvertLockType(int16_t managedLockType)
 {
     // the managed enum Interop.Sys.LockType has no 1:1 mapping with corresponding Unix values
@@ -1479,7 +1641,7 @@ static int16_t ConvertLockType(int16_t managedLockType)
     }
 }
 
-#if !HAVE_NON_LEGACY_STATFS || defined(__APPLE__)
+#if !HAVE_NON_LEGACY_STATFS || defined(TARGET_APPLE) || defined(TARGET_FREEBSD)
 static uint32_t MapFileSystemNameToEnum(const char* fileSystemName)
 {
     uint32_t result = 0;
@@ -1614,6 +1776,7 @@ static uint32_t MapFileSystemNameToEnum(const char* fileSystemName)
     return result;
 }
 #endif
+#endif /* TARGET_WASI */
 
 uint32_t SystemNative_GetFileSystemType(intptr_t fd)
 {
@@ -1625,8 +1788,11 @@ uint32_t SystemNative_GetFileSystemType(intptr_t fd)
     while ((statfsRes = fstatfs(ToFileDescriptor(fd), &statfsArgs)) == -1 && errno == EINTR) ;
     if (statfsRes == -1) return 0;
 
-#if defined(__APPLE__)
-    // On OSX-like systems, f_type is version-specific. Don't use it, just map the name.
+#if defined(TARGET_APPLE) || defined(TARGET_FREEBSD)
+    // * On OSX-like systems, f_type is version-specific. Don't use it, just map the name.
+    // * Specifically, on FreeBSD with ZFS, f_type may return a value like 0xDE when emulating
+    //   FreeBSD on macOS (e.g., FreeBSD-x64 on macOS ARM64). Therefore, we use f_fstypename to
+    //   get the correct filesystem type.
     return MapFileSystemNameToEnum(statfsArgs.f_fstypename);
 #else
     // On Linux, f_type is signed. This causes some filesystem types to be represented as
@@ -1634,6 +1800,8 @@ uint32_t SystemNative_GetFileSystemType(intptr_t fd)
     uint32_t result = (uint32_t)statfsArgs.f_type;
     return result;
 #endif
+#elif defined(TARGET_WASI)
+    return EINTR;
 #elif !HAVE_NON_LEGACY_STATFS
     int statfsRes;
     struct statvfs statfsArgs;
@@ -1648,6 +1816,7 @@ uint32_t SystemNative_GetFileSystemType(intptr_t fd)
 
 int32_t SystemNative_LockFileRegion(intptr_t fd, int64_t offset, int64_t length, int16_t lockType)
 {
+#if !defined(TARGET_WASI)
     int16_t unixLockType = ConvertLockType(lockType);
     if (offset < 0 || length < 0)
     {
@@ -1677,6 +1846,9 @@ int32_t SystemNative_LockFileRegion(intptr_t fd, int64_t offset, int64_t length,
     int32_t ret;
     while ((ret = fcntl (ToFileDescriptor(fd), command, &lockArgs)) < 0 && errno == EINTR);
     return ret;
+#else /* TARGET_WASI */
+    return EINTR;
+#endif /* TARGET_WASI */
 }
 
 int32_t SystemNative_LChflags(const char* path, uint32_t flags)
@@ -1777,6 +1949,53 @@ int32_t SystemNative_PWrite(intptr_t fd, void* buffer, int32_t bufferSize, int64
     return (int32_t)count;
 }
 
+#if (HAVE_PREADV || HAVE_PWRITEV) && !defined(TARGET_WASM)
+static int GetAllowedVectorCount(IOVector* vectors, int32_t vectorCount)
+{
+#if defined(IOV_MAX)
+    const int IovMax = IOV_MAX;
+#else
+    // In theory all the platforms that we support define IOV_MAX,
+    // but we want to be extra safe and provde a fallback
+    // in case it turns out to not be true.
+    // 16 is low, but supported on every platform.
+    const int IovMax = 16;
+#endif
+
+    int allowedCount = (int)vectorCount;
+
+    // We need to respect the limit of items that can be passed in iov.
+    // In case of writes, the managed code is responsible for handling incomplete writes.
+    // In case of reads, we simply returns the number of bytes read and it's up to the users.
+    if (IovMax < allowedCount)
+    {
+        allowedCount = IovMax;
+    }
+
+#if defined(TARGET_APPLE)
+    // For macOS preadv and pwritev can fail with EINVAL when the total length
+    // of all vectors overflows a 32-bit integer.
+    size_t totalLength = 0;
+    for (int i = 0; i < allowedCount; i++) 
+    {
+        assert(INT_MAX >= vectors[i].Count);
+
+        totalLength += vectors[i].Count;
+
+        if (totalLength > INT_MAX)
+        {
+            allowedCount = i;
+            break;
+        }
+    }
+#else
+    (void)vectors;
+#endif
+
+    return allowedCount;
+}
+#endif // (HAVE_PREADV || HAVE_PWRITEV) && !defined(TARGET_WASM)
+
 int64_t SystemNative_PReadV(intptr_t fd, IOVector* vectors, int32_t vectorCount, int64_t fileOffset)
 {
     assert(vectors != NULL);
@@ -1785,7 +2004,8 @@ int64_t SystemNative_PReadV(intptr_t fd, IOVector* vectors, int32_t vectorCount,
     int64_t count = 0;
     int fileDescriptor = ToFileDescriptor(fd);
 #if HAVE_PREADV && !defined(TARGET_WASM) // preadv is buggy on WASM
-    while ((count = preadv(fileDescriptor, (struct iovec*)vectors, (int)vectorCount, (off_t)fileOffset)) < 0 && errno == EINTR);
+    int allowedVectorCount = GetAllowedVectorCount(vectors, vectorCount);
+    while ((count = preadv(fileDescriptor, (struct iovec*)vectors, allowedVectorCount, (off_t)fileOffset)) < 0 && errno == EINTR);
 #else
     int64_t current;
     for (int i = 0; i < vectorCount; i++)
@@ -1825,7 +2045,8 @@ int64_t SystemNative_PWriteV(intptr_t fd, IOVector* vectors, int32_t vectorCount
     int64_t count = 0;
     int fileDescriptor = ToFileDescriptor(fd);
 #if HAVE_PWRITEV && !defined(TARGET_WASM) // pwritev is buggy on WASM
-    while ((count = pwritev(fileDescriptor, (struct iovec*)vectors, (int)vectorCount, (off_t)fileOffset)) < 0 && errno == EINTR);
+    int allowedVectorCount = GetAllowedVectorCount(vectors, vectorCount);
+    while ((count = pwritev(fileDescriptor, (struct iovec*)vectors, allowedVectorCount, (off_t)fileOffset)) < 0 && errno == EINTR);
 #else
     int64_t current;
     for (int i = 0; i < vectorCount; i++)

@@ -7,7 +7,9 @@ using System.IO;
 using System.Reflection.Internal;
 using System.Reflection.Metadata;
 using System.Runtime.ExceptionServices;
+using System.Runtime.InteropServices;
 using System.Threading;
+using ImmutableArrayExtensions = System.Linq.ImmutableArrayExtensions;
 
 namespace System.Reflection.PortableExecutable
 {
@@ -198,8 +200,12 @@ namespace System.Reflection.PortableExecutable
                     else
                     {
                         // The peImage is left null, but the lazyMetadataBlock is initialized up front.
-                        _lazyPEHeaders = new PEHeaders(peStream);
-                        _lazyMetadataBlock = StreamMemoryBlockProvider.ReadMemoryBlockNoLock(peStream, _lazyPEHeaders.MetadataStartOffset, _lazyPEHeaders.MetadataSize);
+                        _lazyPEHeaders = new PEHeaders(peStream, actualSize, IsLoadedImage);
+
+                        if (_lazyPEHeaders.MetadataStartOffset != -1)
+                        {
+                            _lazyMetadataBlock = StreamMemoryBlockProvider.ReadMemoryBlockNoLock(peStream, _lazyPEHeaders.MetadataStartOffset, _lazyPEHeaders.MetadataSize);
+                        }
                     }
                     // We read all we need, the stream is going to be closed.
                 }
@@ -381,6 +387,12 @@ namespace System.Reflection.PortableExecutable
             if (_lazyPESectionBlocks == null)
             {
                 Interlocked.CompareExchange(ref _lazyPESectionBlocks, new AbstractMemoryBlock[PEHeaders.SectionHeaders.Length], null);
+            }
+
+            AbstractMemoryBlock? existingBlock = Volatile.Read(ref _lazyPESectionBlocks[index]);
+            if (existingBlock != null)
+            {
+                return existingBlock;
             }
 
             AbstractMemoryBlock newBlock;
@@ -658,7 +670,7 @@ namespace System.Reflection.PortableExecutable
 
             return new PdbChecksumDebugDirectoryData(
                 algorithmName,
-                ImmutableByteArrayInterop.DangerousCreateFromUnderlyingArray(ref checksum));
+                ImmutableCollectionsMarshal.AsImmutableArray(checksum));
         }
 
         /// <summary>
@@ -726,7 +738,7 @@ namespace System.Reflection.PortableExecutable
 
             // First try .pdb file specified in CodeView data (we prefer .pdb file on disk over embedded PDB
             // since embedded PDB needs decompression which is less efficient than memory-mapping the file).
-            var codeViewEntry = entries.FirstOrDefault(e => e.IsPortableCodeView);
+            var codeViewEntry = ImmutableArrayExtensions.FirstOrDefault(entries, e => e.IsPortableCodeView);
             if (codeViewEntry.DataSize != 0 &&
                 TryOpenCodeViewPortablePdb(codeViewEntry, peImageDirectory!, pdbFileStreamProvider, out pdbReaderProvider, out pdbPath, ref errorToReport))
             {
@@ -734,7 +746,7 @@ namespace System.Reflection.PortableExecutable
             }
 
             // if it failed try Embedded Portable PDB (if available):
-            var embeddedPdbEntry = entries.FirstOrDefault(e => e.Type == DebugDirectoryEntryType.EmbeddedPortablePdb);
+            var embeddedPdbEntry = ImmutableArrayExtensions.FirstOrDefault(entries, e => e.Type == DebugDirectoryEntryType.EmbeddedPortablePdb);
             if (embeddedPdbEntry.DataSize != 0)
             {
                 bool openedEmbeddedPdb = false;

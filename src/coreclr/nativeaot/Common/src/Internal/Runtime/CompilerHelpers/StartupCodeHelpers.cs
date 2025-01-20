@@ -10,7 +10,7 @@ using Debug = Internal.Runtime.CompilerHelpers.StartupDebug;
 
 namespace Internal.Runtime.CompilerHelpers
 {
-    public static partial class StartupCodeHelpers
+    internal static partial class StartupCodeHelpers
     {
         /// <summary>
         /// Table of logical modules. Only the first s_moduleCount elements of the array are in use.
@@ -27,7 +27,7 @@ namespace Internal.Runtime.CompilerHelpers
         /// </summary>
         private static IntPtr s_moduleGCStaticsSpines;
 
-        [UnmanagedCallersOnly(EntryPoint = "InitializeModules", CallConvs = new Type[] { typeof(CallConvCdecl) })]
+        [UnmanagedCallersOnly(EntryPoint = "InitializeModules")]
         internal static unsafe void InitializeModules(IntPtr osModule, IntPtr* pModuleHeaders, int count, IntPtr* pClasslibFunctions, int nClasslibFunctions)
         {
             RuntimeImports.RhpRegisterOsModule(osModule);
@@ -139,7 +139,7 @@ namespace Internal.Runtime.CompilerHelpers
                 // Call write barrier directly. Assigning object reference does a type check.
                 Debug.Assert((uint)moduleIndex < (uint)gcStaticBaseSpines.Length);
                 ref object rawSpineIndexData = ref Unsafe.As<byte, object>(ref Unsafe.As<RawArrayData>(gcStaticBaseSpines).Data);
-                InternalCalls.RhpAssignRef(ref Unsafe.Add(ref rawSpineIndexData, moduleIndex), spine);
+                Unsafe.Add(ref rawSpineIndexData, moduleIndex) = spine;
             }
 
             // Initialize frozen object segment for the module with GC present
@@ -153,7 +153,7 @@ namespace Internal.Runtime.CompilerHelpers
 
         private static unsafe void InitializeModuleFrozenObjectSegment(IntPtr segmentStart, int length)
         {
-            if (RuntimeImports.RhpRegisterFrozenSegment(segmentStart, (IntPtr)length) == IntPtr.Zero)
+            if (RuntimeImports.RhRegisterFrozenSegment((void*)segmentStart, (nuint)length, (nuint)length, (nuint)length) == IntPtr.Zero)
             {
                 // This should only happen if we ran out of memory.
                 RuntimeExceptionHelpers.FailFast("Failed to register frozen object segment for the module.");
@@ -177,7 +177,7 @@ namespace Internal.Runtime.CompilerHelpers
                 pCurrent < (pInitializers + length);
                 pCurrent += MethodTable.SupportsRelativePointers ? sizeof(int) : sizeof(nint))
             {
-                var initializer = MethodTable.SupportsRelativePointers ? (delegate*<void>)ReadRelPtr32(pCurrent) : (delegate*<void>)pCurrent;
+                var initializer = MethodTable.SupportsRelativePointers ? (delegate*<void>)ReadRelPtr32(pCurrent) : *(delegate*<void>*)pCurrent;
                 initializer();
             }
 
@@ -210,7 +210,7 @@ namespace Internal.Runtime.CompilerHelpers
                     RuntimeImports.RhAllocateNewObject(
                         new IntPtr(blockAddr & ~GCStaticRegionConstants.Mask),
                         (uint)GC_ALLOC_FLAGS.GC_ALLOC_PINNED_OBJECT_HEAP,
-                        Unsafe.AsPointer(ref obj));
+                        &obj);
                     if (obj == null)
                     {
                         RuntimeExceptionHelpers.FailFast("Failed allocating GC static bases");
@@ -224,15 +224,15 @@ namespace Internal.Runtime.CompilerHelpers
                         // It actually has all GC fields including non-preinitialized fields and we simply copy over the
                         // entire blob to this object, overwriting everything.
                         void* pPreInitDataAddr = MethodTable.SupportsRelativePointers ? ReadRelPtr32((int*)pBlock + 1) : (void*)*(pBlock + 1);
-                        RuntimeImports.RhBulkMoveWithWriteBarrier(ref obj.GetRawData(), ref *(byte *)pPreInitDataAddr, obj.GetRawObjectDataSize());
+                        RuntimeImports.RhBulkMoveWithWriteBarrier(ref obj.GetRawData(), ref *(byte*)pPreInitDataAddr, obj.GetRawObjectDataSize());
                     }
 
                     // Call write barrier directly. Assigning object reference does a type check.
                     Debug.Assert(currentBase < spine.Length);
-                    InternalCalls.RhpAssignRef(ref Unsafe.Add(ref rawSpineData, currentBase), obj);
+                    Unsafe.Add(ref rawSpineData, currentBase) = obj;
 
                     // Update the base pointer to point to the pinned object
-                    *pBlock = *(IntPtr*)Unsafe.AsPointer(ref obj);
+                    *pBlock = *(IntPtr*)&obj;
                 }
 
                 currentBase++;
@@ -262,9 +262,39 @@ namespace Internal.Runtime.CompilerHelpers
                 switch (command)
                 {
                     case DehydratedDataCommand.Copy:
-                        // TODO: can we do any kind of memcpy here?
-                        for (; payload > 0; payload--)
-                            *pDest++ = *pCurrent++;
+                        Debug.Assert(payload != 0);
+                        if (payload < 4)
+                        {
+                            *pDest = *pCurrent;
+                            if (payload > 1)
+                                *(short*)(pDest + payload - 2) = *(short*)(pCurrent + payload - 2);
+                        }
+                        else if (payload < 8)
+                        {
+                            *(int*)pDest = *(int*)pCurrent;
+                            *(int*)(pDest + payload - 4) = *(int*)(pCurrent + payload - 4);
+                        }
+                        else if (payload <= 16)
+                        {
+#if TARGET_64BIT
+                            *(long*)pDest = *(long*)pCurrent;
+                            *(long*)(pDest + payload - 8) = *(long*)(pCurrent + payload - 8);
+#else
+                            *(int*)pDest = *(int*)pCurrent;
+                            *(int*)(pDest + 4) = *(int*)(pCurrent + 4);
+                            *(int*)(pDest + payload - 8) = *(int*)(pCurrent + payload - 8);
+                            *(int*)(pDest + payload - 4) = *(int*)(pCurrent + payload - 4);
+#endif
+                        }
+                        else
+                        {
+                            // At the time of writing this, 90% of DehydratedDataCommand.Copy cases
+                            // would fall into the above specialized cases. 10% fall back to memmove.
+                            Unsafe.CopyBlock(pDest, pCurrent, (uint)payload);
+                        }
+
+                        pDest += payload;
+                        pCurrent += payload;
                         break;
                     case DehydratedDataCommand.ZeroFill:
                         pDest += payload;

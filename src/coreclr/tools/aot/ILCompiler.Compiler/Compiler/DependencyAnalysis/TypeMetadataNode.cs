@@ -14,6 +14,9 @@ namespace ILCompiler.DependencyAnalysis
 {
     /// <summary>
     /// Represents a type that has metadata generated in the current compilation.
+    /// This node corresponds to an ECMA-335 TypeDef record. It is however not a 1:1
+    /// mapping because IL could be compiled into machine code without generating a record
+    /// in the reflection metadata (which would not be possible in IL terms).
     /// </summary>
     /// <remarks>
     /// Only expected to be used during ILScanning when scanning for reflection.
@@ -42,13 +45,17 @@ namespace ILCompiler.DependencyAnalysis
             else
                 dependencies.Add(factory.ModuleMetadata(_type.Module), "Containing module of a reflectable type");
 
+            MetadataType baseType = _type.MetadataBaseType;
+            if (baseType != null)
+                GetMetadataDependencies(ref dependencies, factory, baseType, "Base type of a reflectable type");
+
             var mdManager = (UsageBasedMetadataManager)factory.MetadataManager;
 
             if (_type.IsEnum)
             {
                 // A lot of the enum reflection actually happens on top of the respective MethodTable (e.g. getting the underlying type),
                 // so for enums also include their MethodTable.
-                dependencies.Add(factory.MaximallyConstructableType(_type), "Reflectable enum");
+                dependencies.Add(factory.ReflectedType(_type), "Reflectable enum");
 
                 // Enums are not useful without their literal fields. The literal fields are not referenced
                 // from anywhere (source code reference to enums compiles to the underlying numerical constants in IL).
@@ -70,9 +77,11 @@ namespace ILCompiler.DependencyAnalysis
                     {
                         try
                         {
-                            // Make sure we're not adding a method to the dependency graph that is going to
-                            // cause trouble down the line. This entire type would not actually load on CoreCLR anyway.
-                            LibraryRootProvider.CheckCanGenerateMethod(method);
+                            // Spot check by parsing signature.
+                            // Previously we had LibraryRootProvider.CheckCanGenerateMethod(method) here, but that one
+                            // expects fully instantiated types and methods. We operate on definitions here.
+                            // This is not as thorough as it could be. This option is unsupported anyway.
+                            _ = method.Signature;
                         }
                         catch (TypeSystemException)
                         {
@@ -122,6 +131,18 @@ namespace ILCompiler.DependencyAnalysis
 
                 default:
                     Debug.Assert(type.IsDefType);
+
+                    // We generally postpone creating MethodTables until absolutely needed.
+                    // IDynamicInterfaceCastableImplementation is special in the sense that just obtaining a System.Type
+                    // (by e.g. browsing custom attribute metadata) gives the user enough to pass this to runtime APIs
+                    // that need a MethodTable. We don't have a legitimate type handle without the MethodTable. Other
+                    // kinds of APIs that expect a MethodTable have enough dataflow annotation to trigger warnings.
+                    // There's no dataflow annotations on the IDynamicInterfaceCastable.GetInterfaceImplementation API.
+                    if (type.IsInterface && ((MetadataType)type).IsDynamicInterfaceCastableImplementation())
+                    {
+                        dependencies ??= new DependencyList();
+                        dependencies.Add(nodeFactory.ReflectedType(type), "Reflected IDynamicInterfaceCastableImplementation");
+                    }
 
                     TypeDesc typeDefinition = type.GetTypeDefinition();
                     if (typeDefinition != type)

@@ -10,14 +10,15 @@ namespace Microsoft.Interop.JavaScript
 {
     internal sealed class ArraySegmentJSGenerator : PrimitiveJSGenerator
     {
-        private MarshalerType _elementMarshalerType;
-        public ArraySegmentJSGenerator(MarshalerType elementMarshalerType)
-            : base(MarshalerType.ArraySegment)
+        private readonly MarshalerType _elementMarshalerType;
+
+        public ArraySegmentJSGenerator(TypePositionInfo info, StubCodeContext context, MarshalerType elementMarshalerType)
+            : base(info, context, MarshalerType.ArraySegment)
         {
             _elementMarshalerType = elementMarshalerType;
         }
 
-        public override IEnumerable<ExpressionSyntax> GenerateBind(TypePositionInfo info, StubCodeContext context)
+        public override IEnumerable<ExpressionSyntax> GenerateBind()
         {
             yield return InvocationExpression(MarshalerTypeName(Type),
                 ArgumentList(SingletonSeparatedList(Argument(MarshalerTypeName(_elementMarshalerType)))));

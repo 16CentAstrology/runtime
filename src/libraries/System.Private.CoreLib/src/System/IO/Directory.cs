@@ -60,7 +60,7 @@ namespace System.IO
         /// <returns>An object that represents the directory that was created.</returns>
         /// <exception cref="ArgumentException"><paramref name="prefix" /> contains a directory separator.</exception>
         /// <exception cref="IOException">A new directory cannot be created.</exception>
-        public static unsafe DirectoryInfo CreateTempSubdirectory(string? prefix = null)
+        public static DirectoryInfo CreateTempSubdirectory(string? prefix = null)
         {
             EnsureNoDirectorySeparators(prefix);
 
@@ -68,9 +68,9 @@ namespace System.IO
             return new DirectoryInfo(path, isNormalized: true);
         }
 
-        private static void EnsureNoDirectorySeparators(string? value, [CallerArgumentExpression("value")] string? paramName = null)
+        private static void EnsureNoDirectorySeparators(string? value, [CallerArgumentExpression(nameof(value))] string? paramName = null)
         {
-            if (value is not null && value.AsSpan().IndexOfAny(PathInternal.DirectorySeparators) >= 0)
+            if (value is not null && value.AsSpan().ContainsAny(PathInternal.DirectorySeparators))
             {
                 throw new ArgumentException(SR.Argument_DirectorySeparatorInvalid, paramName);
             }

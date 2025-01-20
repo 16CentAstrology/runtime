@@ -92,9 +92,10 @@ namespace Thunkerator
         private Dictionary<string, List<string>> _architectureVectorInstructionSetJitNames = new Dictionary<string, List<string>>();
         private HashSet<string> _64BitArchitectures = new HashSet<string>();
         private Dictionary<string, string> _64BitVariantArchitectureJitNameSuffix = new Dictionary<string, string>();
+        private Dictionary<string, string> _64BitVariantArchitectureManagedNameSuffix = new Dictionary<string, string>();
 
         // This represents the number of flags fields we currently track
-        private const int FlagsFieldCount = 1;
+        private const int FlagsFieldCount = 2;
 
         private void ArchitectureEncountered(string arch)
         {
@@ -126,6 +127,11 @@ namespace Thunkerator
             return _64BitVariantArchitectureJitNameSuffix[arch];
         }
 
+        private string ArchToManagedInstructionSetSuffixArch(string arch)
+        {
+            return _64BitVariantArchitectureManagedNameSuffix[arch];
+        }
+
         public bool ParseInput(TextReader tr)
         {
             int currentLineIndex = 1;
@@ -151,7 +157,7 @@ namespace Thunkerator
                     switch (command[0])
                     {
                         case "definearch":
-                            if (command.Length != 4)
+                            if (command.Length != 5)
                                 throw new Exception($"Incorrect number of args for definearch {command.Length}");
                             ArchitectureEncountered(command[1]);
                             if (command[2] == "64Bit")
@@ -163,6 +169,7 @@ namespace Thunkerator
                                 throw new Exception("Architecture must be 32Bit or 64Bit");
                             }
                             _64BitVariantArchitectureJitNameSuffix[command[1]] = command[3];
+                            _64BitVariantArchitectureManagedNameSuffix[command[1]] = command[4];
                             break;
                         case "instructionset":
                             if (command.Length != 7)
@@ -767,6 +774,114 @@ namespace Internal.JitInterface
                 tr.WriteLine("                    break;");
             }
             tr.Write(@"            }
+        }
+    }
+    public static class InstructionSetParser
+    {
+        public static InstructionSet LookupPlatformIntrinsicInstructionSet(TargetArchitecture targetArch, TypeDesc intrinsicType)
+        {
+            MetadataType metadataType = intrinsicType.GetTypeDefinition() as MetadataType;
+            if (metadataType == null)
+                return InstructionSet.ILLEGAL;
+
+            string namespaceName = metadataType.Namespace;
+            string typeName = metadataType.Name;
+            string nestedTypeName = null;
+            while (metadataType.ContainingType != null)
+            {
+                var enclosingType = (MetadataType)metadataType.ContainingType;
+                namespaceName = enclosingType.Namespace;
+                nestedTypeName = nestedTypeName is null ? metadataType.Name : $""{metadataType.Name}_{nestedTypeName}"";
+                typeName = enclosingType.Name;
+                metadataType = enclosingType;
+            }
+
+            string platformIntrinsicNamespace;
+
+            switch (targetArch)
+            {
+                case TargetArchitecture.ARM64:
+                    platformIntrinsicNamespace = ""System.Runtime.Intrinsics.Arm"";
+                    break;
+
+                case TargetArchitecture.X64:
+                case TargetArchitecture.X86:
+                    platformIntrinsicNamespace = ""System.Runtime.Intrinsics.X86"";
+                    break;
+
+                default:
+                    return InstructionSet.ILLEGAL;
+            }
+
+            if (namespaceName != platformIntrinsicNamespace)
+                return InstructionSet.ILLEGAL;
+
+            switch (targetArch)
+            {
+");
+            foreach (string architecture in _architectures)
+            {
+                tr.Write($@"
+                case TargetArchitecture.{architecture}:
+                switch (typeName)
+                {{
+");
+                var archInstructionSets = _instructionSets.Where(isa => isa.Architecture == architecture && !string.IsNullOrEmpty(isa.ManagedName)).ToArray();
+                foreach (var instructionSet in archInstructionSets)
+                {
+                    // Nested instructionSets are handled as part of their parent instruction set.
+                    // It's unlikely we'll ever have an implementing managed class with an underscore
+                    // in the public name, so we assume the underscore is a nested type name separator.
+                    if (instructionSet.ManagedName.Contains('_'))
+                        continue;
+
+                    List<InstructionSetInfo> relatedInstructionSets = [instructionSet];
+                    foreach (var potentialNestedInstructionSet in archInstructionSets)
+                    {
+                        string managedName = potentialNestedInstructionSet.ManagedName;
+                        if (managedName.Contains('_') && instructionSet.ManagedName == managedName[..managedName.IndexOf('_')])
+                        {
+                            relatedInstructionSets.Add(potentialNestedInstructionSet);
+                        }
+                    }
+
+                    tr.Write(@$"
+                    case ""{instructionSet.ManagedName}"":");
+
+                    foreach (var relatedInstructionSet in relatedInstructionSets)
+                    {
+                        string nestedTypeName = relatedInstructionSet == instructionSet ? null : relatedInstructionSet.ManagedName[(relatedInstructionSet.ManagedName.IndexOf('_') + 1)..];
+                        bool hasSixtyFourBitInstructionSet = _64bitVariants[architecture].Contains(relatedInstructionSet.JitName) && _64BitArchitectures.Contains(architecture);
+                        if (hasSixtyFourBitInstructionSet)
+                        {
+                            string sixtyFourBitInstructionSet = ArchToManagedInstructionSetSuffixArch(architecture);
+                            tr.Write($@"
+                        if (nestedTypeName == ""{(nestedTypeName is null ? sixtyFourBitInstructionSet : $"{nestedTypeName}_{sixtyFourBitInstructionSet}")}"")
+                        {{ return InstructionSet.{architecture}_{relatedInstructionSet.JitName}_{ArchToInstructionSetSuffixArch(architecture)}; }}
+                        else");
+                        }
+                        if (nestedTypeName != null)
+                        {
+                            tr.Write($@"
+                        if (nestedTypeName == ""{nestedTypeName}"")
+                        {{ return InstructionSet.{architecture}_{relatedInstructionSet.JitName}; }}
+                        else");
+                        }
+                    }
+
+                    tr.Write($@"
+                        {{ return InstructionSet.{architecture}_{instructionSet.JitName}; }}
+");
+                }
+                tr.Write($@"
+                }}
+                break;
+");
+            }
+
+            tr.Write(@"
+            }
+            return InstructionSet.ILLEGAL;
         }
     }
 }

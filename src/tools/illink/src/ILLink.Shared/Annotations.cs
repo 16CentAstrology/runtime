@@ -13,13 +13,6 @@ using ILLink.Shared.TrimAnalysis;
 
 namespace ILLink.Shared
 {
-	// Temporary workaround - should be removed once linker can be upgraded to build against
-	// high enough version of the framework which has this enum value.
-	internal static class DynamicallyAccessedMemberTypesOverlay
-	{
-		public const DynamicallyAccessedMemberTypes Interfaces = (DynamicallyAccessedMemberTypes) 0x2000;
-	}
-
 	internal static class Annotations
 	{
 		public static bool SourceHasRequiredAnnotations (
@@ -71,28 +64,36 @@ namespace ILLink.Shared
 				memberTypesList.Remove (DynamicallyAccessedMemberTypes.PublicParameterlessConstructor);
 
 			return string.Join (", ", memberTypesList.Select (mt => {
-				string mtName = mt == DynamicallyAccessedMemberTypesOverlay.Interfaces
-					? nameof (DynamicallyAccessedMemberTypesOverlay.Interfaces)
+				string mtName = mt == DynamicallyAccessedMemberTypes.Interfaces
+					? nameof (DynamicallyAccessedMemberTypes.Interfaces)
 					: mt.ToString ();
 
 				return $"'{nameof (DynamicallyAccessedMemberTypes)}.{mtName}'";
 			}));
 		}
 
-		static readonly DynamicallyAccessedMemberTypes[] AllDynamicallyAccessedMemberTypes = GetAllDynamicallyAccessedMemberTypes ();
+		private static readonly DynamicallyAccessedMemberTypes[] AllDynamicallyAccessedMemberTypes = GetAllDynamicallyAccessedMemberTypes ();
 
-		static DynamicallyAccessedMemberTypes[] GetAllDynamicallyAccessedMemberTypes ()
+		private static DynamicallyAccessedMemberTypes[] GetAllDynamicallyAccessedMemberTypes ()
 		{
 			var values = new HashSet<DynamicallyAccessedMemberTypes> (
 								Enum.GetValues (typeof (DynamicallyAccessedMemberTypes))
 								.Cast<DynamicallyAccessedMemberTypes> ());
-			if (!values.Contains (DynamicallyAccessedMemberTypesOverlay.Interfaces))
-				values.Add (DynamicallyAccessedMemberTypesOverlay.Interfaces);
+			values.Add (DynamicallyAccessedMemberTypes.Interfaces);
 			return values.ToArray ();
 		}
 
 		public static (DiagnosticId Id, string[] Arguments) GetDiagnosticForAnnotationMismatch (ValueWithDynamicallyAccessedMembers source, ValueWithDynamicallyAccessedMembers target, string missingAnnotations)
 		{
+			source = source switch {
+				// FieldValue and MethodReturnValue have only one diagnostic argument, so formatting throws when the source
+				// is a NullableValueWithDynamicallyAccessedMembers.
+				// The correct behavior here is to unwrap always, as the underlying type is the one that has the annotations,
+				// but it is a breaking change for other UnderlyingTypeValues.
+				// https://github.com/dotnet/runtime/issues/93800
+				NullableValueWithDynamicallyAccessedMembers { UnderlyingTypeValue: FieldValue or MethodReturnValue } nullable => nullable.UnderlyingTypeValue,
+				_ => source
+			};
 			DiagnosticId diagnosticId = (source, target) switch {
 				(MethodParameterValue maybeThisSource, MethodParameterValue maybeThisTarget) when maybeThisSource.IsThisParameter () && maybeThisTarget.IsThisParameter () => DiagnosticId.DynamicallyAccessedMembersMismatchThisParameterTargetsThisParameter,
 				(MethodParameterValue maybeThis, MethodParameterValue) when maybeThis.IsThisParameter () => DiagnosticId.DynamicallyAccessedMembersMismatchThisParameterTargetsParameter,

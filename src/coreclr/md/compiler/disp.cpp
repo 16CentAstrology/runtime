@@ -140,7 +140,6 @@ HRESULT Disp::OpenScope(                // Return code.
     IUnknown    **ppIUnk)               // [out] Return interface on success.
 {
     HRESULT     hr;
-    LOG((LF_METADATA, LL_INFO10, "Disp::OpenScope(%S, 0x%08x, 0x%08x, 0x%08x)\n", MDSTR(szFileName), dwOpenFlags, riid, ppIUnk));
 
     IMDCommon *pMDCommon = NULL;
 
@@ -205,7 +204,6 @@ Disp::OpenRawScope(
             else
             {
                 pMeta->Release(); // Give back refcount from QI
-                LOG((LOGMD, "{%08x} Found in cache '%S'\n", pMeta, MDSTR(szFileName)));
             }
 
             goto ErrExit;
@@ -238,8 +236,6 @@ Disp::OpenRawScope(
     //  satisfied by one or the other (depending on search algorithm), and eventually,
     //  the "other" copy will be released.
     IfFailGo(pMeta->AddToCache());
-
-    LOG((LOGMD, "{%08x} Successfully opened '%S'\n", pMeta, MDSTR(szFileName)));
 
 #if defined(_DEBUG)
     if (CLRConfig::GetConfigValue(CLRConfig::INTERNAL_MD_RegMetaDump))
@@ -585,6 +581,8 @@ HRESULT Disp::QueryInterface(REFIID riid, void **ppUnk)
 #ifdef FEATURE_METADATA_EMIT_PORTABLE_PDB
     else if (riid == IID_IMetaDataDispenserEx2)
         *ppUnk = (IMetaDataDispenserEx2 *) this;
+    else if (riid == IID_IILAsmPortablePdbWriter)
+        *ppUnk = (IILAsmPortablePdbWriter *) this;
 #endif
 #ifdef FEATURE_METADATA_CUSTOM_DATA_SOURCE
     else if (riid == IID_IMetaDataDispenserCustom)
@@ -749,11 +747,11 @@ Disp::SetOption(
         }
         else
         {
-            INT32 len = WszWideCharToMultiByte(CP_UTF8, 0, V_BSTR(pvalue), -1, NULL, 0, NULL, NULL);
+            INT32 len = WideCharToMultiByte(CP_UTF8, 0, V_BSTR(pvalue), -1, NULL, 0, NULL, NULL);
             m_OptionValue.m_RuntimeVersion = new (nothrow) char[len];
             if (m_OptionValue.m_RuntimeVersion == NULL)
             IfFailGo(E_INVALIDARG);
-            WszWideCharToMultiByte(CP_UTF8, 0, V_BSTR(pvalue), -1, m_OptionValue.m_RuntimeVersion, len, NULL, NULL);
+            WideCharToMultiByte(CP_UTF8, 0, V_BSTR(pvalue), -1, m_OptionValue.m_RuntimeVersion, len, NULL, NULL);
         }
     }
     else if (optionid == MetaDataInitialSize)

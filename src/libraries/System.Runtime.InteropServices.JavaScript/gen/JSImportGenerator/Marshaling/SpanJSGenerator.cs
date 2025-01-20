@@ -10,14 +10,15 @@ namespace Microsoft.Interop.JavaScript
 {
     internal sealed class SpanJSGenerator : PrimitiveJSGenerator
     {
-        private MarshalerType _elementMarshalerType;
-        public SpanJSGenerator(MarshalerType elementMarshalerType)
-            : base(MarshalerType.Span)
+        private readonly MarshalerType _elementMarshalerType;
+
+        public SpanJSGenerator(TypePositionInfo info, StubCodeContext context, MarshalerType elementMarshalerType)
+            : base(info, context, MarshalerType.Span)
         {
             _elementMarshalerType = elementMarshalerType;
         }
 
-        public override IEnumerable<ExpressionSyntax> GenerateBind(TypePositionInfo info, StubCodeContext context)
+        public override IEnumerable<ExpressionSyntax> GenerateBind()
         {
             yield return InvocationExpression(MarshalerTypeName(Type),
                 ArgumentList(SingletonSeparatedList(Argument(MarshalerTypeName(_elementMarshalerType)))));

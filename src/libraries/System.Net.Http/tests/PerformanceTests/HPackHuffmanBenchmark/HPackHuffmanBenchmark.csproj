@@ -1,8 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <TargetFramework>$(NetCoreAppMinimum)</TargetFramework>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net6.0</TargetFramework>
     <StringResourcesPath>../../../src/Resources/Strings.resx</StringResourcesPath>
     <Nullable>enable</Nullable>
   </PropertyGroup>
@@ -12,6 +12,8 @@
              Link="Common\System\Net\Http\aspnetcore\Http2\Hpack\Huffman.cs" />
     <Compile Include="$(CommonPath)System\Net\Http\aspnetcore\Http2\Hpack\HuffmanDecodingException.cs"
              Link="Common\System\Net\Http\aspnetcore\Http2\Hpack\HuffmanDecodingException.cs" />
+    <Compile Include="$(CommonPath)System\Obsoletions.cs"
+             Link="Common\System\Obsoletions.cs" />
     <Compile Include="Program.cs" />
   </ItemGroup>
   

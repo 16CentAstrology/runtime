@@ -667,7 +667,7 @@ namespace System.Xml.RwFactoryWriterTests
                     // no 'implemented' variations satisfying the filter
                     testCase = new CXmlDriverEmptyTestCase(testCaseName, testCaseDescription,
                         " no variations with @Implemented='True' " +
-                        (_requiredLanguage != null && _requiredLanguage.Length != 0 ? " and @Language='" + _requiredLanguage + "'" : "") +
+                        (!string.IsNullOrEmpty(_requiredLanguage) ? " and @Language='" + _requiredLanguage + "'" : "") +
                         (filterXPath == null ? "" : " and satisfying '" + filterXPath + "'"), _testModule);
 
                 // add test case
@@ -693,7 +693,7 @@ namespace System.Xml.RwFactoryWriterTests
             }
             catch (Exception e)
             {
-                throw new CXmlDriverException("XmlDriver: CreateIntance failed for TestCase '" + "CRWFactoryDriverScenario"/*type.Name*/ + "' (" + e.ToString() + ")");
+                throw new CXmlDriverException($"XmlDriver: CreateInstance failed for TestCase '{nameof(CRWFactoryDriverScenario) /*type.Name*/}' ({e})");
             }
             return tmp;
         }

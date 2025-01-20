@@ -5,9 +5,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading.Tasks;
 using System.IO;
-using System.Runtime.InteropServices;
 using System.Text;
-using System.Threading;
 using Xunit;
 
 namespace System
@@ -172,7 +170,7 @@ namespace System
         public static IEnumerable<object[]> GetKeyChords()
         {
             yield return MkConsoleKeyInfo("Ctrl+B", '\x02', ConsoleKey.B, ConsoleModifiers.Control);
-            yield return MkConsoleKeyInfo("Ctrl+Alt+B", OperatingSystem.IsWindows() ? '\x00' : '\x02', ConsoleKey.B, ConsoleModifiers.Control | ConsoleModifiers.Alt);
+            yield return MkConsoleKeyInfo("Ctrl+Alt+B", '\x00', ConsoleKey.B, ConsoleModifiers.Control | ConsoleModifiers.Alt);
             yield return MkConsoleKeyInfo("Enter", '\r', ConsoleKey.Enter, default);
 
             if (OperatingSystem.IsWindows())
@@ -181,8 +179,8 @@ namespace System
             }
             else
             {
-                // Validate current Unix console behaviour: '\n' is reported as '\r'
-                yield return MkConsoleKeyInfo("Ctrl+J", '\r', ConsoleKey.Enter, default);
+                // Ctrl+J is mapped by every Unix Terminal as Ctrl+Enter with new line character
+                yield return MkConsoleKeyInfo("Ctrl+J", '\n', ConsoleKey.Enter, ConsoleModifiers.Control);
             }
 
             static object[] MkConsoleKeyInfo (string requestedKeyChord, char keyChar, ConsoleKey consoleKey, ConsoleModifiers modifiers)
@@ -324,34 +322,14 @@ namespace System
         }
 
         [ConditionalFact(nameof(ManualTestsEnabled))]
-        [SkipOnPlatform(TestPlatforms.Browser | TestPlatforms.iOS | TestPlatforms.MacCatalyst | TestPlatforms.tvOS, "Not supported on Browser, iOS, MacCatalyst, or tvOS.")]
-        public static void ResizeTest()
+        public static void CursorLeftFromLastColumn()
         {
-            bool wasResized = false;
-
-            using (ManualResetEvent manualResetEvent = new(false))
-            using (PosixSignalRegistration.Create(PosixSignal.SIGWINCH,
-                       ctx =>
-                       {
-                           wasResized = true;
-                           Assert.Equal(PosixSignal.SIGWINCH, ctx.Signal);
-                           manualResetEvent.Set();
-                       }))
-            {
-                int widthBefore = Console.WindowWidth;
-                int heightBefore = Console.WindowHeight;
-
-                Assert.False(wasResized);
-
-                Console.SetWindowSize(widthBefore / 2, heightBefore / 2);
-
-                Assert.True(manualResetEvent.WaitOne(TimeSpan.FromMilliseconds(50)));
-                Assert.True(wasResized);
-                Assert.Equal(widthBefore / 2, Console.WindowWidth );
-                Assert.Equal(heightBefore / 2, Console.WindowHeight );
-
-                Console.SetWindowSize(widthBefore, heightBefore);
-            }
+            Console.CursorLeft = Console.BufferWidth - 1;
+            Console.Write("2");
+            Console.CursorLeft = 0;
+            Console.Write("1");
+            Console.WriteLine();
+            AssertUserExpectedResults("single line with '1' at the start and '2' at the end.");
         }
 
         private static void AssertUserExpectedResults(string expected)

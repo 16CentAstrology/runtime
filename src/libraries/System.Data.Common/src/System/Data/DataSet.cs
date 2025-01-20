@@ -77,6 +77,13 @@ namespace System.Data
         internal bool _useDataSetSchemaOnly; // UseDataSetSchemaOnly  , for YUKON
         internal bool _udtIsWrapped; // if UDT is wrapped , for YUKON
 
+        [FeatureSwitchDefinition("System.Data.DataSet.XmlSerializationIsSupported")]
+        [FeatureGuard(typeof(RequiresUnreferencedCodeAttribute))]
+        [FeatureGuard(typeof(RequiresDynamicCodeAttribute))]
+#pragma warning disable IL4000
+        internal static bool XmlSerializationIsSupported => AppContext.TryGetSwitch("System.Data.DataSet.XmlSerializationIsSupported", out bool isSupported) ? isSupported : true;
+#pragma warning restore IL4000
+
         /// <summary>
         /// Initializes a new instance of the <see cref='System.Data.DataSet'/> class.
         /// </summary>
@@ -244,6 +251,8 @@ namespace System.Data
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
         [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2112:ReflectionToRequiresUnreferencedCode",
             Justification = "CreateInstanceOfThisType's use of GetType uses only the parameterless constructor, but the annotations preserve all non-public constructors causing a warning for the serialization constructors. Those constructors won't be used here.")]
+        [Obsolete(Obsoletions.LegacyFormatterImplMessage, DiagnosticId = Obsoletions.LegacyFormatterImplDiagId, UrlFormat = Obsoletions.SharedUrlFormat)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
         protected DataSet(SerializationInfo info, StreamingContext context) : this(info, context, true)
         {
         }
@@ -252,6 +261,8 @@ namespace System.Data
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
         [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2112:ReflectionToRequiresUnreferencedCode",
             Justification = "CreateInstanceOfThisType's use of GetType uses only the parameterless constructor, but the annotations preserve all non-public constructors causing a warning for the serialization constructors. Those constructors won't be used here.")]
+        [Obsolete(Obsoletions.LegacyFormatterImplMessage, DiagnosticId = Obsoletions.LegacyFormatterImplDiagId, UrlFormat = Obsoletions.SharedUrlFormat)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
         protected DataSet(SerializationInfo info, StreamingContext context, bool ConstructSchema) : this()
         {
             SerializationFormat remotingFormat = SerializationFormat.Xml;
@@ -296,6 +307,10 @@ namespace System.Data
 
         [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2026:RequiresUnreferencedCode",
             Justification = "Binary serialization is unsafe in general and is planned to be obsoleted. We do not want to mark interface or ctors of this class as unsafe as that would show many unnecessary warnings elsewhere.")]
+        [UnconditionalSuppressMessage("AotAnalysis", "IL3050:RequiresDynamicCode",
+            Justification = "Binary serialization is unsafe in general and is planned to be obsoleted. We do not want to mark interface or ctors of this class as unsafe as that would show many unnecessary warnings elsewhere.")]
+        [Obsolete(Obsoletions.LegacyFormatterImplMessage, DiagnosticId = Obsoletions.LegacyFormatterImplDiagId, UrlFormat = Obsoletions.SharedUrlFormat)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
         public virtual void GetObjectData(SerializationInfo info, StreamingContext context)
         {
             SerializationFormat remotingFormat = RemotingFormat;
@@ -307,6 +322,7 @@ namespace System.Data
 
         // Serialize all the tables.
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         private void SerializeDataSet(SerializationInfo info, StreamingContext context, SerializationFormat remotingFormat)
         {
             Debug.Assert(info != null);
@@ -338,10 +354,12 @@ namespace System.Data
                     //Tables, Columns, Rows
                     for (int i = 0; i < Tables.Count; i++)
                     {
-                        BinaryFormatter bf = new BinaryFormatter(null, new StreamingContext(context.State, false));
                         MemoryStream memStream = new MemoryStream();
 #pragma warning disable SYSLIB0011 // Issue https://github.com/dotnet/runtime/issues/39289 tracks finding an alternative to BinaryFormatter
+#pragma warning disable SYSLIB0050 // StreamingContext ctor is obsolete
+                        BinaryFormatter bf = new BinaryFormatter(null, new StreamingContext(context.State, false));
                         bf.Serialize(memStream, Tables[i]);
+#pragma warning restore SYSLIB0050
 #pragma warning restore SYSLIB0011
                         memStream.Position = 0;
                         info.AddValue(string.Format(CultureInfo.InvariantCulture, "DataSet.Tables_{0}", i), memStream.GetBuffer());
@@ -421,9 +439,11 @@ namespace System.Data
                         byte[] buffer = (byte[])info.GetValue(string.Format(CultureInfo.InvariantCulture, "DataSet.Tables_{0}", i), typeof(byte[]))!;
                         MemoryStream memStream = new MemoryStream(buffer);
                         memStream.Position = 0;
-                        BinaryFormatter bf = new BinaryFormatter(null, new StreamingContext(context.State, false));
 #pragma warning disable SYSLIB0011 // Issue https://github.com/dotnet/runtime/issues/39289 tracks finding an alternative to BinaryFormatter
+#pragma warning disable SYSLIB0050 // StreamingContext ctor is obsolete
+                        BinaryFormatter bf = new BinaryFormatter(null, new StreamingContext(context.State, false));
                         DataTable dt = (DataTable)bf.Deserialize(memStream);
+#pragma warning restore SYSLIB0050
 #pragma warning restore SYSLIB0011
                         Tables.Add(dt);
                     }
@@ -738,7 +758,7 @@ namespace System.Data
                 DataCommonEventSource.Log.Trace("<ds.DataSet.set_DataSetName|API> {0}, '{1}'", ObjectID, value);
                 if (value != _dataSetName)
                 {
-                    if (value == null || value.Length == 0)
+                    if (string.IsNullOrEmpty(value))
                     {
                         throw ExceptionBuilder.SetDataSetNameToEmpty();
                     }
@@ -1427,6 +1447,7 @@ namespace System.Data
         IList IListSource.GetList() => DefaultViewManager;
 
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         internal static string GetRemotingDiffGram(DataTable table)
         {
             StringWriter strWriter = new StringWriter(CultureInfo.InvariantCulture);
@@ -1439,6 +1460,7 @@ namespace System.Data
         }
 
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         public string GetXml()
         {
             long logScopeId = DataCommonEventSource.Log.EnterScope("<ds.DataSet.GetXml|API> {0}", ObjectID);
@@ -1459,6 +1481,7 @@ namespace System.Data
         }
 
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         public string GetXmlSchema()
         {
             long logScopeId = DataCommonEventSource.Log.EnterScope("<ds.DataSet.GetXmlSchema|API> {0}", ObjectID);
@@ -1478,6 +1501,7 @@ namespace System.Data
         }
 
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         internal string GetXmlSchemaForRemoting(DataTable? table)
         {
             StringWriter strWriter = new StringWriter(CultureInfo.InvariantCulture);
@@ -1551,6 +1575,7 @@ namespace System.Data
         /// Infer the XML schema from the specified <see cref='System.IO.TextReader'/> into the <see cref='System.Data.DataSet'/>.
         /// </summary>
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         public void InferXmlSchema(XmlReader? reader, string[]? nsArray)
         {
             long logScopeId = DataCommonEventSource.Log.EnterScope("<ds.DataSet.InferXmlSchema|API> {0}", ObjectID);
@@ -1589,6 +1614,7 @@ namespace System.Data
         /// Infer the XML schema from the specified <see cref='System.IO.TextReader'/> into the <see cref='System.Data.DataSet'/>.
         /// </summary>
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         public void InferXmlSchema(Stream? stream, string[]? nsArray)
         {
             if (stream == null)
@@ -1603,6 +1629,7 @@ namespace System.Data
         /// Infer the XML schema from the specified <see cref='System.IO.TextReader'/> into the <see cref='System.Data.DataSet'/>.
         /// </summary>
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         public void InferXmlSchema(TextReader? reader, string[]? nsArray)
         {
             if (reader == null)
@@ -1617,6 +1644,7 @@ namespace System.Data
         /// Infer the XML schema from the specified file into the <see cref='System.Data.DataSet'/>.
         /// </summary>
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         public void InferXmlSchema(string fileName, string[]? nsArray)
         {
             XmlTextReader xr = new XmlTextReader(fileName);
@@ -1634,9 +1662,11 @@ namespace System.Data
         /// Reads the XML schema from the specified <see cref="System.Xml.XmlReader" /> into the <see cref="System.Data.DataSet" />
         /// </summary>
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         public void ReadXmlSchema(XmlReader? reader) => ReadXmlSchema(reader, false);
 
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         internal void ReadXmlSchema(XmlReader? reader, bool denyResolving)
         {
             long logScopeId = DataCommonEventSource.Log.EnterScope("<ds.DataSet.ReadXmlSchema|INFO> {0}, reader, denyResolving={1}", ObjectID, denyResolving);
@@ -1782,6 +1812,7 @@ namespace System.Data
         }
 
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         internal void ReadXSDSchema(XmlReader reader)
         {
             XmlSchemaSet sSet = new XmlSchemaSet();
@@ -1837,6 +1868,7 @@ namespace System.Data
         /// <see cref='System.Data.DataSet'/>.
         /// </summary>
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         public void ReadXmlSchema(Stream? stream)
         {
             if (stream == null)
@@ -1851,6 +1883,7 @@ namespace System.Data
         /// Reads the XML schema from the specified <see cref='System.IO.TextReader'/> into the <see cref='System.Data.DataSet'/>.
         /// </summary>
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         public void ReadXmlSchema(TextReader? reader)
         {
             if (reader == null)
@@ -1865,6 +1898,7 @@ namespace System.Data
         /// Reads the XML schema from the specified file into the <see cref='System.Data.DataSet'/>.
         /// </summary>
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         public void ReadXmlSchema(string fileName)
         {
             XmlTextReader xr = new XmlTextReader(fileName);
@@ -1882,12 +1916,14 @@ namespace System.Data
         /// <summary>Writes the <see cref='DataSet'/> structure as an XML schema to using the specified <see cref='Stream'/> object.</summary>
         /// <param name="stream">A <see cref='Stream'/> object used to write to a file.</param>
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         public void WriteXmlSchema(Stream? stream) => WriteXmlSchema(stream, SchemaFormat.Public, null);
 
         /// <summary>Writes the <see cref='DataSet'/> structure as an XML schema to using the specified <see cref='Stream'/> object.</summary>
         /// <param name="stream">A <see cref='Stream'/> object used to write to a file.</param>
         /// <param name="multipleTargetConverter">A delegate used to convert <see cref='Type'/> into string.</param>
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         public void WriteXmlSchema(Stream? stream, Converter<Type, string> multipleTargetConverter)
         {
             ADP.CheckArgumentNull(multipleTargetConverter, nameof(multipleTargetConverter));
@@ -1897,12 +1933,14 @@ namespace System.Data
         /// <summary>Writes the <see cref='DataSet'/> structure as an XML schema to a file.</summary>
         /// <param name="fileName">The file name (including the path) to which to write.</param>
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         public void WriteXmlSchema(string fileName) => WriteXmlSchema(fileName, SchemaFormat.Public, null);
 
         /// <summary>Writes the <see cref='DataSet'/> structure as an XML schema to a file.</summary>
         /// <param name="fileName">The file name (including the path) to which to write.</param>
         /// <param name="multipleTargetConverter">A delegate used to convert <see cref='Type'/> into string.</param>
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         public void WriteXmlSchema(string fileName, Converter<Type, string> multipleTargetConverter)
         {
             ADP.CheckArgumentNull(multipleTargetConverter, nameof(multipleTargetConverter));
@@ -1912,12 +1950,14 @@ namespace System.Data
         /// <summary>Writes the <see cref='DataSet'/> structure as an XML schema to a <see cref='TextWriter'/> object.</summary>
         /// <param name="writer">The <see cref='TextWriter'/> object with which to write.</param>
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         public void WriteXmlSchema(TextWriter? writer) => WriteXmlSchema(writer, SchemaFormat.Public, null);
 
         /// <summary>Writes the <see cref='DataSet'/> structure as an XML schema to a <see cref='TextWriter'/> object.</summary>
         /// <param name="writer">The <see cref='TextWriter'/> object with which to write.</param>
         /// <param name="multipleTargetConverter">A delegate used to convert <see cref='Type'/> into string.</param>
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         public void WriteXmlSchema(TextWriter? writer, Converter<Type, string> multipleTargetConverter)
         {
             ADP.CheckArgumentNull(multipleTargetConverter, nameof(multipleTargetConverter));
@@ -1927,12 +1967,14 @@ namespace System.Data
         /// <summary>Writes the <see cref='DataSet'/> structure as an XML schema to an <see cref='XmlWriter'/> object.</summary>
         /// <param name="writer">The <see cref='XmlWriter'/> object with which to write.</param>
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         public void WriteXmlSchema(XmlWriter? writer) => WriteXmlSchema(writer, SchemaFormat.Public, null);
 
         /// <summary>Writes the <see cref='DataSet'/> structure as an XML schema to an <see cref='XmlWriter'/> object.</summary>
         /// <param name="writer">The <see cref='XmlWriter'/> object with which to write.</param>
         /// <param name="multipleTargetConverter">A delegate used to convert <see cref='Type'/> into string.</param>
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         public void WriteXmlSchema(XmlWriter? writer, Converter<Type, string> multipleTargetConverter)
         {
             ADP.CheckArgumentNull(multipleTargetConverter, nameof(multipleTargetConverter));
@@ -1940,6 +1982,7 @@ namespace System.Data
         }
 
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         private void WriteXmlSchema(string fileName, SchemaFormat schemaFormat, Converter<Type, string>? multipleTargetConverter)
         {
             XmlTextWriter xw = new XmlTextWriter(fileName, null);
@@ -1957,6 +2000,7 @@ namespace System.Data
         }
 
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         private void WriteXmlSchema(Stream? stream, SchemaFormat schemaFormat, Converter<Type, string>? multipleTargetConverter)
         {
             if (stream == null)
@@ -1971,6 +2015,7 @@ namespace System.Data
         }
 
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         private void WriteXmlSchema(TextWriter? writer, SchemaFormat schemaFormat, Converter<Type, string>? multipleTargetConverter)
         {
             if (writer == null)
@@ -1985,6 +2030,7 @@ namespace System.Data
         }
 
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         private void WriteXmlSchema(XmlWriter? writer, SchemaFormat schemaFormat, Converter<Type, string>? multipleTargetConverter)
         {
             long logScopeId = DataCommonEventSource.Log.EnterScope("<ds.DataSet.WriteXmlSchema|INFO> {0}, schemaFormat={1}", ObjectID, schemaFormat);
@@ -2016,9 +2062,11 @@ namespace System.Data
         #endregion
 
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         public XmlReadMode ReadXml(XmlReader? reader) => ReadXml(reader, false);
 
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         internal XmlReadMode ReadXml(XmlReader? reader, bool denyResolving)
         {
             IDisposable? restrictedScope = null;
@@ -2293,6 +2341,7 @@ namespace System.Data
         }
 
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         public XmlReadMode ReadXml(Stream? stream)
         {
             if (stream == null)
@@ -2309,6 +2358,7 @@ namespace System.Data
         }
 
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         public XmlReadMode ReadXml(TextReader? reader)
         {
             if (reader == null)
@@ -2325,6 +2375,7 @@ namespace System.Data
         }
 
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         public XmlReadMode ReadXml(string fileName)
         {
             XmlTextReader xr = new XmlTextReader(fileName);
@@ -2343,6 +2394,7 @@ namespace System.Data
         }
 
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         internal void InferSchema(XmlDocument xdoc, string[]? excludedNamespaces, XmlReadMode mode)
         {
             long logScopeId = DataCommonEventSource.Log.EnterScope("<ds.DataSet.InferSchema|INFO> {0}, mode={1}", ObjectID, mode);
@@ -2395,6 +2447,7 @@ namespace System.Data
         }
 
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         private void ReadXmlDiffgram(XmlReader reader)
         {
             long logScopeId = DataCommonEventSource.Log.EnterScope("<ds.DataSet.ReadXmlDiffgram|INFO> {0}", ObjectID);
@@ -2526,9 +2579,11 @@ namespace System.Data
         /// <summary>
         /// </summary>
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         public XmlReadMode ReadXml(XmlReader? reader, XmlReadMode mode) => ReadXml(reader, mode, false);
 
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         internal XmlReadMode ReadXml(XmlReader? reader, XmlReadMode mode, bool denyResolving)
         {
             IDisposable? restictedScope = null;
@@ -2779,6 +2834,7 @@ namespace System.Data
         }
 
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         public XmlReadMode ReadXml(Stream? stream, XmlReadMode mode)
         {
             if (stream == null)
@@ -2793,6 +2849,7 @@ namespace System.Data
         }
 
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         public XmlReadMode ReadXml(TextReader? reader, XmlReadMode mode)
         {
             if (reader == null)
@@ -2807,6 +2864,7 @@ namespace System.Data
         }
 
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         public XmlReadMode ReadXml(string fileName, XmlReadMode mode)
         {
             XmlTextReader xr;
@@ -2834,21 +2892,26 @@ namespace System.Data
         }
 
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         public void WriteXml(Stream? stream) => WriteXml(stream, XmlWriteMode.IgnoreSchema);
 
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         public void WriteXml(TextWriter? writer) => WriteXml(writer, XmlWriteMode.IgnoreSchema);
 
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         public void WriteXml(XmlWriter? writer) => WriteXml(writer, XmlWriteMode.IgnoreSchema);
 
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         public void WriteXml(string fileName) => WriteXml(fileName, XmlWriteMode.IgnoreSchema);
 
         /// <summary>
         /// Writes schema and data for the DataSet.
         /// </summary>
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         public void WriteXml(Stream? stream, XmlWriteMode mode)
         {
             if (stream != null)
@@ -2861,6 +2924,7 @@ namespace System.Data
         }
 
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         public void WriteXml(TextWriter? writer, XmlWriteMode mode)
         {
             if (writer != null)
@@ -2873,6 +2937,7 @@ namespace System.Data
         }
 
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         public void WriteXml(XmlWriter? writer, XmlWriteMode mode)
         {
             long logScopeId = DataCommonEventSource.Log.EnterScope("<ds.DataSet.WriteXml|API> {0}, mode={1}", ObjectID, mode);
@@ -2900,6 +2965,7 @@ namespace System.Data
         }
 
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         public void WriteXml(string fileName, XmlWriteMode mode)
         {
             long logScopeId = DataCommonEventSource.Log.EnterScope("<ds.DataSet.WriteXml|API> {0}, fileName='{1}', mode={2}", ObjectID, fileName, (int)mode);
@@ -3329,7 +3395,7 @@ namespace System.Data
         }
 
         // SDUB: may be better to rewrite this as nonrecursive?
-        internal DataTable? FindTable(DataTable? baseTable, PropertyDescriptor[] props, int propStart)
+        internal static DataTable? FindTable(DataTable? baseTable, PropertyDescriptor[] props, int propStart)
         {
             if (props.Length < propStart + 1)
             {
@@ -3357,6 +3423,7 @@ namespace System.Data
         }
 
         [RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         protected virtual void ReadXmlSerializable(XmlReader reader)
         {
             // <DataSet xsi:nil="true"> does not mean DataSet is null,but it does not have any child
@@ -3449,6 +3516,11 @@ namespace System.Data
 
         XmlSchema? IXmlSerializable.GetSchema()
         {
+            if (!XmlSerializationIsSupported)
+            {
+                throw new NotSupportedException(SR.DataSet_XmlSerializationUnsupported);
+            }
+
             if (GetType() == typeof(DataSet))
             {
                 return null;
@@ -3459,15 +3531,14 @@ namespace System.Data
             XmlWriter writer = new XmlTextWriter(stream, null);
             if (writer != null)
             {
-#pragma warning disable IL2026 // suppressed in ILLink.Suppressions.LibraryBuild.xml
                 WriteXmlSchema(this, writer);
-#pragma warning restore IL2026
             }
             stream.Position = 0;
             return XmlSchema.Read(new XmlTextReader(stream), null);
         }
 
         [RequiresUnreferencedCode("DataSet.GetSchema uses TypeDescriptor and XmlSerialization underneath which are not trimming safe. Members from serialized types may be trimmed if not referenced directly.")]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         private static void WriteXmlSchema(DataSet ds, XmlWriter writer)
         {
             (new XmlTreeGen(SchemaFormat.WebService)).Save(ds, writer);
@@ -3475,6 +3546,11 @@ namespace System.Data
 
         void IXmlSerializable.ReadXml(XmlReader reader)
         {
+            if (!XmlSerializationIsSupported)
+            {
+                throw new NotSupportedException(SR.DataSet_XmlSerializationUnsupported);
+            }
+
             bool fNormalization = true;
             XmlTextReader? xmlTextReader = null;
             IXmlTextParser? xmlTextParser = reader as IXmlTextParser;
@@ -3493,9 +3569,7 @@ namespace System.Data
                 }
             }
 
-#pragma warning disable IL2026 // suppressed in ILLink.Suppressions.LibraryBuild.xml
             ReadXmlSerializableInternal(reader);
-#pragma warning restore IL2026
 
             if (xmlTextParser != null)
             {
@@ -3508,6 +3582,7 @@ namespace System.Data
         }
 
         [RequiresUnreferencedCode("DataSet.ReadXml uses XmlSerialization underneath which is not trimming safe. Members from serialized types may be trimmed if not referenced directly.")]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         private void ReadXmlSerializableInternal(XmlReader reader)
         {
             ReadXmlSerializable(reader);
@@ -3515,12 +3590,16 @@ namespace System.Data
 
         void IXmlSerializable.WriteXml(XmlWriter writer)
         {
-#pragma warning disable IL2026 // suppressed in ILLink.Suppressions.LibraryBuild.xml
+            if (!XmlSerializationIsSupported)
+            {
+                throw new NotSupportedException(SR.DataSet_XmlSerializationUnsupported);
+            }
+
             WriteXmlInternal(writer);
-#pragma warning restore IL2026
         }
 
         [RequiresUnreferencedCode("DataSet.WriteXml uses XmlSerialization underneath which is not trimming safe. Members from serialized types may be trimmed if not referenced directly.")]
+        [RequiresDynamicCode(RequiresDynamicCodeMessage)]
         private void WriteXmlInternal(XmlWriter writer)
         {
             WriteXmlSchema(writer, SchemaFormat.WebService, null);

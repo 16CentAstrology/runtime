@@ -1,17 +1,17 @@
 ﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
-using Microsoft.CodeAnalysis.Text;
-using Microsoft.Interop.UnitTests;
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using System.Text;
-using System.Threading.Tasks;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Testing;
+using Microsoft.CodeAnalysis.Text;
+using Microsoft.Interop.UnitTests;
 using Xunit;
 using static Microsoft.Interop.LibraryImportGenerator;
 
@@ -21,18 +21,15 @@ namespace LibraryImportGenerator.UnitTests
     {
         private static readonly GeneratorDriverOptions EnableIncrementalTrackingDriverOptions = new GeneratorDriverOptions(IncrementalGeneratorOutputKind.None, trackIncrementalGeneratorSteps: true);
 
-        public const string RequiresIncrementalSyntaxTreeModifySupport = "The GeneratorDriver treats all SyntaxTree replace operations on a Compilation as an Add/Remove operation instead of a Modify operation"
-            + ", so all cached results based on that input are thrown out. As a result, we cannot validate that unrelated changes within the same SyntaxTree do not cause regeneration.";
-
         [Fact]
-        public async Task AddingNewUnrelatedType_DoesNotRegenerateSource()
+        public void AddingNewUnrelatedType_DoesNotRegenerateSource()
         {
-            string source = CodeSnippets.BasicParametersAndModifiers<int>();
+            string source = RemoveTestMarkup(CodeSnippets.BasicParametersAndModifiers<int>());
 
-            Compilation comp1 = await TestUtils.CreateCompilation(source);
+            Compilation comp1 = TestUtils.CreateCompilation(source);
 
             Microsoft.Interop.LibraryImportGenerator generator = new();
-            GeneratorDriver driver = TestUtils.CreateDriver(comp1, null, new IIncrementalGenerator[] { generator }, EnableIncrementalTrackingDriverOptions);
+            GeneratorDriver driver = TestUtils.CreateDriver(comp1, null, [generator], EnableIncrementalTrackingDriverOptions);
 
             driver = driver.RunGenerators(comp1);
 
@@ -49,16 +46,21 @@ namespace LibraryImportGenerator.UnitTests
         }
 
         [Fact]
-        public async Task AppendingUnrelatedSource_DoesNotRegenerateSource()
+        public void AppendingUnrelatedSource_DoesNotRegenerateSource()
         {
-            string source = $"namespace NS{{{CodeSnippets.BasicParametersAndModifiers<int>()}}}";
+            string source = $$"""
+                namespace NS
+                {
+                    {{RemoveTestMarkup(CodeSnippets.BasicParametersAndModifiers<int>())}}
+                }
+                """;
 
             SyntaxTree syntaxTree = CSharpSyntaxTree.ParseText(source, new CSharpParseOptions(LanguageVersion.Preview));
 
-            Compilation comp1 = await TestUtils.CreateCompilation(new[] { syntaxTree });
+            Compilation comp1 = TestUtils.CreateCompilation(new[] { syntaxTree });
 
             Microsoft.Interop.LibraryImportGenerator generator = new();
-            GeneratorDriver driver = TestUtils.CreateDriver(comp1, null, new[] { generator }, EnableIncrementalTrackingDriverOptions);
+            GeneratorDriver driver = TestUtils.CreateDriver(comp1, null, [generator], EnableIncrementalTrackingDriverOptions);
 
             driver = driver.RunGenerators(comp1);
 
@@ -78,18 +80,18 @@ namespace LibraryImportGenerator.UnitTests
         }
 
         [Fact]
-        public async Task AddingFileWithNewLibraryImport_DoesNotRegenerateOriginalMethod()
+        public void AddingFileWithNewLibraryImport_DoesNotRegenerateOriginalMethod()
         {
-            string source = CodeSnippets.BasicParametersAndModifiers<int>();
+            string source = RemoveTestMarkup(CodeSnippets.BasicParametersAndModifiers<int>());
 
-            Compilation comp1 = await TestUtils.CreateCompilation(source);
+            Compilation comp1 = TestUtils.CreateCompilation(source);
 
             Microsoft.Interop.LibraryImportGenerator generator = new();
-            GeneratorDriver driver = TestUtils.CreateDriver(comp1, null, new[] { generator }, EnableIncrementalTrackingDriverOptions);
+            GeneratorDriver driver = TestUtils.CreateDriver(comp1, null, [generator], EnableIncrementalTrackingDriverOptions);
 
             driver = driver.RunGenerators(comp1);
 
-            Compilation comp2 = comp1.AddSyntaxTrees(CSharpSyntaxTree.ParseText(CodeSnippets.MarshalAsParametersAndModifiers<bool>(UnmanagedType.I1), new CSharpParseOptions(LanguageVersion.Preview)));
+            Compilation comp2 = comp1.AddSyntaxTrees(CSharpSyntaxTree.ParseText(RemoveTestMarkup(CodeSnippets.MarshalAsParametersAndModifiers<bool>(UnmanagedType.I1)), new CSharpParseOptions(LanguageVersion.Preview)));
 
             GeneratorDriver driver2 = driver.RunGenerators(comp2);
             GeneratorRunResult runResult = driver2.GetRunResult().Results[0];
@@ -108,16 +110,16 @@ namespace LibraryImportGenerator.UnitTests
         }
 
         [Fact]
-        public async Task ReplacingFileWithNewLibraryImport_DoesNotRegenerateStubsInOtherFiles()
+        public void ReplacingFileWithNewLibraryImport_DoesNotRegenerateStubsInOtherFiles()
         {
-            Compilation comp1 = await TestUtils.CreateCompilation(new string[] { CodeSnippets.BasicParametersAndModifiers<int>(), CodeSnippets.MarshalAsParametersAndModifiers<bool>(UnmanagedType.I1) });
+            Compilation comp1 = TestUtils.CreateCompilation([ RemoveTestMarkup(CodeSnippets.BasicParametersAndModifiers<int>()), RemoveTestMarkup(CodeSnippets.MarshalAsParametersAndModifiers<bool>(UnmanagedType.I1)) ]);
 
             Microsoft.Interop.LibraryImportGenerator generator = new();
-            GeneratorDriver driver = TestUtils.CreateDriver(comp1, null, new[] { generator }, EnableIncrementalTrackingDriverOptions);
+            GeneratorDriver driver = TestUtils.CreateDriver(comp1, null, [generator], EnableIncrementalTrackingDriverOptions);
 
             driver = driver.RunGenerators(comp1);
 
-            Compilation comp2 = comp1.ReplaceSyntaxTree(comp1.SyntaxTrees.First(), CSharpSyntaxTree.ParseText(CodeSnippets.BasicParametersAndModifiers<ulong>(), new CSharpParseOptions(LanguageVersion.Preview)));
+            Compilation comp2 = comp1.ReplaceSyntaxTree(comp1.SyntaxTrees.First(), CSharpSyntaxTree.ParseText(RemoveTestMarkup(CodeSnippets.BasicParametersAndModifiers<ulong>()), new CSharpParseOptions(LanguageVersion.Preview)));
             GeneratorDriver driver2 = driver.RunGenerators(comp2);
             GeneratorRunResult runResult = driver2.GetRunResult().Results[0];
 
@@ -135,22 +137,22 @@ namespace LibraryImportGenerator.UnitTests
         }
 
         [Fact]
-        public async Task ChangingMarshallingStrategy_RegeneratesStub()
+        public void ChangingMarshallingStrategy_RegeneratesStub()
         {
-            string stubSource = CodeSnippets.BasicParametersAndModifiers("CustomType", CodeSnippets.DisableRuntimeMarshalling);
+            string stubSource = RemoveTestMarkup(CodeSnippets.BasicParametersAndModifiers("CustomType", CodeSnippets.DisableRuntimeMarshalling));
 
             string customTypeImpl1 = "struct CustomType { System.IntPtr handle; }";
 
             string customTypeImpl2 = "class CustomType : Microsoft.Win32.SafeHandles.SafeHandleZeroOrMinusOneIsInvalid { public CustomType():base(true){} protected override bool ReleaseHandle(){return true;} }";
 
 
-            Compilation comp1 = await TestUtils.CreateCompilation(stubSource);
+            Compilation comp1 = TestUtils.CreateCompilation(stubSource);
 
             SyntaxTree customTypeImpl1Tree = CSharpSyntaxTree.ParseText(customTypeImpl1, new CSharpParseOptions(LanguageVersion.Preview));
             comp1 = comp1.AddSyntaxTrees(customTypeImpl1Tree);
 
             Microsoft.Interop.LibraryImportGenerator generator = new();
-            GeneratorDriver driver = TestUtils.CreateDriver(comp1, null, new[] { generator }, EnableIncrementalTrackingDriverOptions);
+            GeneratorDriver driver = TestUtils.CreateDriver(comp1, null, [generator], EnableIncrementalTrackingDriverOptions);
 
             driver = driver.RunGenerators(comp1);
 
@@ -174,22 +176,22 @@ namespace LibraryImportGenerator.UnitTests
         }
 
         [Fact]
-        public async Task ChangingMarshallingAttributes_SameStrategy_DoesNotRegenerate()
+        public void ChangingMarshallingAttributes_SameStrategy_DoesNotRegenerate()
         {
-            string source = CodeSnippets.BasicParametersAndModifiers<int>();
+            string source = RemoveTestMarkup(CodeSnippets.BasicParametersAndModifiers<int>());
 
             SyntaxTree syntaxTree = CSharpSyntaxTree.ParseText(source, new CSharpParseOptions(LanguageVersion.Preview));
 
-            Compilation comp1 = await TestUtils.CreateCompilation(new[] { syntaxTree });
+            Compilation comp1 = TestUtils.CreateCompilation([syntaxTree]);
 
             Microsoft.Interop.LibraryImportGenerator generator = new();
-            GeneratorDriver driver = TestUtils.CreateDriver(comp1, null, new[] { generator }, EnableIncrementalTrackingDriverOptions);
+            GeneratorDriver driver = TestUtils.CreateDriver(comp1, null, [generator], EnableIncrementalTrackingDriverOptions);
 
             driver = driver.RunGenerators(comp1);
 
             SyntaxTree newTree = syntaxTree.WithRootAndOptions(
                 SyntaxFactory.ParseCompilationUnit(
-                    CodeSnippets.MarshalAsParametersAndModifiers<int>(System.Runtime.InteropServices.UnmanagedType.I4)),
+                    RemoveTestMarkup(CodeSnippets.MarshalAsParametersAndModifiers<int>(System.Runtime.InteropServices.UnmanagedType.I4))),
                 syntaxTree.Options);
 
             Compilation comp2 = comp1.ReplaceSyntaxTree(comp1.SyntaxTrees.First(), newTree);
@@ -212,16 +214,23 @@ namespace LibraryImportGenerator.UnitTests
                 });
         }
 
+        public static IEnumerable<object[]> CompilationObjectLivenessSources()
+        {
+            // Basic stub
+            yield return new[] { RemoveTestMarkup(CodeSnippets.BasicParametersAndModifiers<int>()) };
+            // Stub with custom string marshaller
+            yield return new[] { RemoveTestMarkup(CodeSnippets.CustomStringMarshallingParametersAndModifiers<string>()) };
+        }
+
         // This test requires precise GC to ensure that we're accurately testing that we aren't
         // keeping the Compilation alive.
-        [ConditionalFact(typeof(PlatformDetection), nameof(PlatformDetection.IsPreciseGcSupported))]
-        public async Task GeneratorRun_WithNewCompilation_DoesNotKeepOldCompilationAlive()
+        [MemberData(nameof(CompilationObjectLivenessSources))]
+        [ConditionalTheory(typeof(PlatformDetection), nameof(PlatformDetection.IsPreciseGcSupported))]
+        public void GeneratorRun_WithNewCompilation_DoesNotKeepOldCompilationAlive(string source)
         {
-            string source = $"namespace NS{{{CodeSnippets.BasicParametersAndModifiers<int>()}}}";
-
             SyntaxTree syntaxTree = CSharpSyntaxTree.ParseText(source, new CSharpParseOptions(LanguageVersion.Preview));
 
-            Compilation comp1 = await TestUtils.CreateCompilation(new[] { syntaxTree });
+            Compilation comp1 = TestUtils.CreateCompilation([syntaxTree]);
 
             var (reference, driver) = RunTwoGeneratorOnTwoIterativeCompilationsAndReturnFirst(comp1);
 
@@ -236,7 +245,7 @@ namespace LibraryImportGenerator.UnitTests
                 Compilation comp2 = startingCompilation.AddSyntaxTrees(CSharpSyntaxTree.ParseText("struct NewType {}", new CSharpParseOptions(LanguageVersion.Preview)));
 
                 Microsoft.Interop.LibraryImportGenerator generator = new();
-                GeneratorDriver driver = TestUtils.CreateDriver(comp2, null, new[] { generator }, EnableIncrementalTrackingDriverOptions);
+                GeneratorDriver driver = TestUtils.CreateDriver(comp2, null, [generator], EnableIncrementalTrackingDriverOptions);
 
                 driver = driver.RunGenerators(comp2);
 
@@ -260,6 +269,12 @@ namespace LibraryImportGenerator.UnitTests
                 // The most recent run with comp3 shouldn't keep anything from comp2 alive.
                 return (new WeakReference(comp2), driver2);
             }
+        }
+
+        private static string RemoveTestMarkup(string sourceWithMarkup)
+        {
+            TestFileMarkupParser.GetSpans(sourceWithMarkup, out string sourceWithoutMarkup, out ImmutableArray<TextSpan> _);
+            return sourceWithoutMarkup;
         }
     }
 }

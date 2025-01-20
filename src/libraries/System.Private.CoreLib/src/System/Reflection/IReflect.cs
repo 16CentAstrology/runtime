@@ -49,11 +49,11 @@ namespace System.Reflection
         PropertyInfo[] GetProperties(BindingFlags bindingAttr);
 
         // Return an array of members which match the passed in name.
-        [DynamicallyAccessedMembers(System.Type.GetAllMembers)]
+        [DynamicallyAccessedMembers(Type.GetAllMembers)]
         MemberInfo[] GetMember(string name, BindingFlags bindingAttr);
 
         // Return an array of all of the members defined for this object.
-        [DynamicallyAccessedMembers(System.Type.GetAllMembers)]
+        [DynamicallyAccessedMembers(Type.GetAllMembers)]
         MemberInfo[] GetMembers(BindingFlags bindingAttr);
 
         // Description of the Binding Process.
@@ -77,7 +77,7 @@ namespace System.Reflection
         // For the default binder, the most specific method will be selected.
         //
         // This will invoke a specific member...
-        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)]
+        [DynamicallyAccessedMembers(Type.InvokeMemberMembers)]
         object? InvokeMember(string name, BindingFlags invokeAttr, Binder? binder, object? target, object?[]? args, ParameterModifier[]? modifiers, CultureInfo? culture, string[]? namedParameters);
 
         // Return the underlying Type that represents the IReflect Object.  For expando object,

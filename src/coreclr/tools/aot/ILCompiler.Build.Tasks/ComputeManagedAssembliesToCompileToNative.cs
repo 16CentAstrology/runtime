@@ -5,6 +5,7 @@ using Microsoft.Build.Framework;
 using Microsoft.Build.Utilities;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
@@ -13,7 +14,7 @@ using System.Reflection.PortableExecutable;
 
 namespace Build.Tasks
 {
-    public class ComputeManagedAssembliesToCompileToNative : DesktopCompatibleTask
+    public class ComputeManagedAssembliesToCompileToNative : Task
     {
         [Required]
         public ITaskItem[] Assemblies
@@ -81,6 +82,13 @@ namespace Build.Tasks
         }
 
         [Output]
+        public ITaskItem[] SatelliteAssemblies
+        {
+            get;
+            set;
+        }
+
+        [Output]
         public ITaskItem[] AssembliesToSkipPublish
         {
             get;
@@ -91,16 +99,21 @@ namespace Build.Tasks
         {
             var list = new List<ITaskItem>();
             var assembliesToSkipPublish = new List<ITaskItem>();
-            var nativeAotFrameworkAssembliesToUse = new HashSet<string>();
+            var satelliteAssemblies = new List<ITaskItem>();
+            var nativeAotFrameworkAssembliesToUse = new Dictionary<string, ITaskItem>();
 
             foreach (ITaskItem taskItem in SdkAssemblies)
             {
-                nativeAotFrameworkAssembliesToUse.Add(Path.GetFileName(taskItem.ItemSpec));
+                var fileName = Path.GetFileName(taskItem.ItemSpec);
+                if (!nativeAotFrameworkAssembliesToUse.ContainsKey(fileName))
+                    nativeAotFrameworkAssembliesToUse.Add(fileName, taskItem);
             }
 
             foreach (ITaskItem taskItem in FrameworkAssemblies)
             {
-                nativeAotFrameworkAssembliesToUse.Add(Path.GetFileName(taskItem.ItemSpec));
+                var fileName = Path.GetFileName(taskItem.ItemSpec);
+                if (!nativeAotFrameworkAssembliesToUse.ContainsKey(fileName))
+                    nativeAotFrameworkAssembliesToUse.Add(fileName, taskItem);
             }
 
             foreach (ITaskItem taskItem in Assemblies)
@@ -145,8 +158,21 @@ namespace Build.Tasks
 
                 // Remove any assemblies whose implementation we want to come from NativeAOT's package.
                 // Currently that's System.Private.* SDK assemblies and a bunch of framework assemblies.
-                if (nativeAotFrameworkAssembliesToUse.Contains(assemblyFileName))
+                if (nativeAotFrameworkAssembliesToUse.TryGetValue(assemblyFileName, out ITaskItem frameworkItem))
                 {
+                    if (GetFileVersion(itemSpec).CompareTo(GetFileVersion(frameworkItem.ItemSpec)) > 0)
+                    {
+                        if (assemblyFileName == "System.Private.CoreLib.dll")
+                        {
+                            Log.LogError($"Overriding System.Private.CoreLib.dll with a newer version is not supported. Attempted to use {itemSpec} instead of {frameworkItem.ItemSpec}.");
+                        }
+                        else
+                        {
+                            // Allow OOB references with higher version to take precedence over the framework assemblies.
+                            list.Add(taskItem);
+                        }
+                    }
+
                     assembliesToSkipPublish.Add(taskItem);
                     continue;
                 }
@@ -164,10 +190,15 @@ namespace Build.Tasks
                                 string culture = moduleMetadataReader.GetString(moduleMetadataReader.GetAssemblyDefinition().Culture);
 
                                 assembliesToSkipPublish.Add(taskItem);
+
+                                // Split satellite assemblies from normal assemblies
                                 if (culture == "" || culture.Equals("neutral", StringComparison.OrdinalIgnoreCase))
                                 {
-                                    // NativeAOT doesn't consume resource assemblies yet so skip them
                                     list.Add(taskItem);
+                                }
+                                else
+                                {
+                                    satelliteAssemblies.Add(taskItem);
                                 }
                             }
                         }
@@ -180,8 +211,15 @@ namespace Build.Tasks
 
             ManagedAssemblies = list.ToArray();
             AssembliesToSkipPublish = assembliesToSkipPublish.ToArray();
+            SatelliteAssemblies = satelliteAssemblies.ToArray();
 
             return true;
+
+            static Version GetFileVersion(string path)
+            {
+                var versionInfo = FileVersionInfo.GetVersionInfo(path);
+                return new Version(versionInfo.FileMajorPart, versionInfo.FileMinorPart, versionInfo.FileBuildPart, versionInfo.FilePrivatePart);
+            }
         }
     }
 }

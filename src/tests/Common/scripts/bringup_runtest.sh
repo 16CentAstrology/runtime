@@ -36,6 +36,7 @@ function print_usage {
     echo '                                     Failing tests are listed in coreclr/tests/failingTestsOutsideWindows.txt, one per'
     echo '                                     line, as paths to .sh files relative to the directory specified by --testRootDir.'
     echo '  --disableEventLogging            : Disable the events logged by both VM and Managed Code'
+    echo '  --jobs=<n>                       : Set the maximum number of processes the scheduler can create.'
     echo '  --sequential                     : Run tests sequentially (default is to run in parallel).'
     echo '  --playlist=<path>                : Run only the tests that are specified in the file at <path>, in the same format as'
     echo '                                     runFailingTestsOnly'
@@ -494,10 +495,6 @@ function copy_test_native_bin_to_test_root {
     if [ -z "$testNativeBinDir" ]; then
         exit_with_error "$errorSource" "--testNativeBinDir is required."
     fi
-    testNativeBinDir=$testNativeBinDir/src
-    if [ ! -d "$testNativeBinDir" ]; then
-        exit_with_error "$errorSource" "Directory specified by --testNativeBinDir does not exist: $testNativeBinDir"
-    fi
 
     # Copy native test components from the native test build into the respective test directory in the test root directory
     find "$testNativeBinDir" -type f -iname "*.$libExtension" |
@@ -510,6 +507,7 @@ function copy_test_native_bin_to_test_root {
 # Variables for unsupported and failing tests
 declare -a unsupportedTests
 declare -a failingTests
+declare -a excludedTests
 declare -a playlistTests
 ((runFailingTestsOnly = 0))
 
@@ -544,6 +542,15 @@ function load_failing_tests {
     failingTests+=($(read_array "$(dirname "${BASH_SOURCE[0]}")/testsFailing.$ARCH.txt"))
 }
 
+function load_excluded_tests {
+    # Read the exclusion file and populate the excludedTests array
+    while IFS=, read -r dllPath reasonMessage; do
+        # Extract the directory path from the dllPath and add it to the excludedTests array
+        dirPath=$(dirname "$dllPath")
+        excludedTests+=("$dirPath")
+    done < "${CORE_ROOT}/TestExclusionList.txt"
+}
+
 function load_playlist_tests {
     # Load the list of tests that are enabled as a part of this test playlist.
     playlistTests=($(read_array "${playlistFile}"))
@@ -564,6 +571,16 @@ function is_failing_test {
             return 0
         fi
     done
+    return 1
+}
+
+function is_excluded_test {
+    for excludedTest in "${excludedTests[@]}"; do
+        if [[ "$1" == "$excludedTest"* ]]; then
+            return 0
+        fi
+    done
+
     return 1
 }
 
@@ -670,8 +687,6 @@ function print_info_from_core_file {
     fi
 }
 
-
-
 function inspect_and_delete_core_files {
     # This function prints some basic information from core files in the current
     # directory and deletes them immediately.
@@ -728,12 +743,12 @@ function run_test {
 }
 
 # Get the number of processors available to the scheduler
-platform="$(uname)"
-if [[ "$platform" == "FreeBSD" ]]; then
+platform="$(uname -s | tr '[:upper:]' '[:lower:]')"
+if [[ "$platform" == "freebsd" ]]; then
   NumProc="$(($(sysctl -n hw.ncpu)+1))"
-elif [[ "$platform" == "NetBSD" || "$platform" == "SunOS" ]]; then
+elif [[ "$platform" == "netbsd" || "$platform" == "sunos" ]]; then
   NumProc="$(($(getconf NPROCESSORS_ONLN)+1))"
-elif [[ "$platform" == "Darwin" ]]; then
+elif [[ "$platform" == "darwin" ]]; then
   NumProc="$(($(getconf _NPROCESSORS_ONLN)+1))"
 elif command -v nproc > /dev/null 2>&1; then
   NumProc="$(nproc)"
@@ -902,6 +917,8 @@ function start_test {
         skip_unsupported_test "$scriptFilePath" "$outputFilePath" &
     elif ((runFailingTestsOnly == 0)) && is_failing_test "$scriptFilePath"; then
         skip_failing_test "$scriptFilePath" "$outputFilePath" &
+    elif is_excluded_test "$scriptFilePath"; then
+        skip_unsupported_test "$scriptFilePath" "$outputFilePath" &
     else
         run_test "$scriptFilePath" "$outputFilePath" &
     fi
@@ -1115,6 +1132,9 @@ do
         --runcrossgentests)
             export RunCrossGen2=1
             ;;
+        --jobs=*)
+            maxProcesses=${i#*=}
+            ;;
         --sequential)
             ((maxProcesses = 1))
             ;;
@@ -1273,10 +1293,10 @@ then
 else
     load_unsupported_tests
     load_failing_tests
+    load_excluded_tests
 fi
 
 scriptPath=$(dirname $0)
-${scriptPath}/setup-stress-dependencies.sh --arch=$ARCH --outputDir=$coreOverlayDir
 
 export __TestEnv=$testEnv
 

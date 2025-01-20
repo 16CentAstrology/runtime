@@ -12,12 +12,12 @@ namespace System.Net.WebSockets
     public sealed partial class ClientWebSocket : WebSocket
     {
         /// <summary>This is really an InternalState value, but Interlocked doesn't support operations on values of enum types.</summary>
-        private int _state;
+        private InternalState _state;
         private WebSocketHandle? _innerWebSocket;
 
         public ClientWebSocket()
         {
-            _state = (int)InternalState.Created;
+            _state = InternalState.Created;
             Options = WebSocketHandle.CreateDefaultOptions();
         }
 
@@ -39,14 +39,14 @@ namespace System.Net.WebSockets
                     return _innerWebSocket.State;
                 }
 
-                switch ((InternalState)_state)
+                switch (_state)
                 {
                     case InternalState.Created:
                         return WebSocketState.None;
                     case InternalState.Connecting:
                         return WebSocketState.Connecting;
                     default: // We only get here if disposed before connecting
-                        Debug.Assert((InternalState)_state == InternalState.Disposed);
+                        Debug.Assert(_state == InternalState.Disposed);
                         return WebSocketState.Closed;
                 }
             }
@@ -105,7 +105,7 @@ namespace System.Net.WebSockets
             }
 
             // Check that we have not started already.
-            switch ((InternalState)Interlocked.CompareExchange(ref _state, (int)InternalState.Connecting, (int)InternalState.Created))
+            switch (Interlocked.CompareExchange(ref _state, InternalState.Connecting, InternalState.Created))
             {
                 case InternalState.Disposed:
                     throw new ObjectDisposedException(GetType().FullName);
@@ -135,9 +135,9 @@ namespace System.Net.WebSockets
                 throw;
             }
 
-            if ((InternalState)Interlocked.CompareExchange(ref _state, (int)InternalState.Connected, (int)InternalState.Connecting) != InternalState.Connecting)
+            if (Interlocked.CompareExchange(ref _state, InternalState.Connected, InternalState.Connecting) != InternalState.Connecting)
             {
-                Debug.Assert(_state == (int)InternalState.Disposed);
+                Debug.Assert(_state == InternalState.Disposed);
                 throw new ObjectDisposedException(GetType().FullName);
             }
         }
@@ -147,6 +147,9 @@ namespace System.Net.WebSockets
 
         public override ValueTask SendAsync(ReadOnlyMemory<byte> buffer, WebSocketMessageType messageType, bool endOfMessage, CancellationToken cancellationToken) =>
             ConnectedWebSocket.SendAsync(buffer, messageType, endOfMessage, cancellationToken);
+
+        public override ValueTask SendAsync(ReadOnlyMemory<byte> buffer, WebSocketMessageType messageType, WebSocketMessageFlags messageFlags, CancellationToken cancellationToken) =>
+            ConnectedWebSocket.SendAsync(buffer, messageType, messageFlags, cancellationToken);
 
         public override Task<WebSocketReceiveResult> ReceiveAsync(ArraySegment<byte> buffer, CancellationToken cancellationToken) =>
             ConnectedWebSocket.ReceiveAsync(buffer, cancellationToken);
@@ -164,9 +167,9 @@ namespace System.Net.WebSockets
         {
             get
             {
-                ObjectDisposedException.ThrowIf((InternalState)_state == InternalState.Disposed, this);
+                ObjectDisposedException.ThrowIf(_state == InternalState.Disposed, this);
 
-                if ((InternalState)_state != InternalState.Connected)
+                if (_state != InternalState.Connected)
                 {
                     throw new InvalidOperationException(SR.net_WebSockets_NotConnected);
                 }
@@ -180,7 +183,7 @@ namespace System.Net.WebSockets
 
         public override void Abort()
         {
-            if ((InternalState)_state != InternalState.Disposed)
+            if (_state != InternalState.Disposed)
             {
                 _innerWebSocket?.Abort();
                 Dispose();
@@ -189,7 +192,7 @@ namespace System.Net.WebSockets
 
         public override void Dispose()
         {
-            if ((InternalState)Interlocked.Exchange(ref _state, (int)InternalState.Disposed) != InternalState.Disposed)
+            if (Interlocked.Exchange(ref _state, InternalState.Disposed) != InternalState.Disposed)
             {
                 _innerWebSocket?.Dispose();
             }

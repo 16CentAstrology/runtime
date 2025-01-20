@@ -1,7 +1,9 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.ComponentModel;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Runtime.Serialization;
 using System.Runtime.Versioning;
 
@@ -64,6 +66,8 @@ namespace System
             _servicePack = servicePack;
         }
 
+        [Obsolete(Obsoletions.LegacyFormatterImplMessage, DiagnosticId = Obsoletions.LegacyFormatterImplDiagId, UrlFormat = Obsoletions.SharedUrlFormat)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
         public void GetObjectData(SerializationInfo info, StreamingContext context)
         {
             throw new PlatformNotSupportedException();
@@ -115,6 +119,7 @@ namespace System
         /// Indicates whether the current application is running on the specified platform.
         /// </summary>
         /// <param name="platform">Case-insensitive platform name. Examples: Browser, Linux, FreeBSD, Android, iOS, macOS, tvOS, watchOS, Windows.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsOSPlatform(string platform)
         {
             ArgumentNullException.ThrowIfNull(platform);
@@ -150,7 +155,6 @@ namespace System
             false;
 #endif
 
-/* TODO https://github.com/dotnet/runtime/issues/78389
         /// <summary>
         /// Indicates whether the current application is running as WASI.
         /// </summary>
@@ -161,7 +165,6 @@ namespace System
 #else
             false;
 #endif
-*/
 
         /// <summary>
         /// Indicates whether the current application is running on Linux.
@@ -239,7 +242,7 @@ namespace System
             false;
 #endif
 
-        internal static bool IsOSXLike() =>
+        internal static bool IsApplePlatform() =>
 #if TARGET_OSX || TARGET_MACCATALYST || TARGET_IOS || TARGET_TVOS
             true;
 #else
@@ -332,13 +335,19 @@ namespace System
             {
                 return current.Minor > minor;
             }
-            if (current.Build != build)
+            // Unspecified build component is to be treated as zero
+            int currentBuild = current.Build < 0 ? 0 : current.Build;
+            build = build < 0 ? 0 : build;
+            if (currentBuild != build)
             {
-                return current.Build > build;
+                return currentBuild > build;
             }
 
-            return current.Revision >= revision
-                || (current.Revision == -1 && revision == 0); // it is unavailable on OSX and Environment.OSVersion.Version.Revision returns -1
+            // Unspecified revision component is to be treated as zero
+            int currentRevision = current.Revision < 0 ? 0 : current.Revision;
+            revision = revision < 0 ? 0 : revision;
+
+            return currentRevision >= revision;
         }
     }
 }

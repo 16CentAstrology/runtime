@@ -121,100 +121,100 @@ short Compiler::mapRegNumToDwarfReg(regNumber reg)
             dwarfReg = 31;
             break;
         case REG_F0:
-            dwarfReg = 64;
+            dwarfReg = 32;
             break;
         case REG_F1:
-            dwarfReg = 65;
+            dwarfReg = 33;
             break;
         case REG_F2:
-            dwarfReg = 66;
+            dwarfReg = 34;
             break;
         case REG_F3:
-            dwarfReg = 67;
+            dwarfReg = 35;
             break;
         case REG_F4:
-            dwarfReg = 68;
+            dwarfReg = 36;
             break;
         case REG_F5:
-            dwarfReg = 69;
+            dwarfReg = 37;
             break;
         case REG_F6:
-            dwarfReg = 70;
+            dwarfReg = 38;
             break;
         case REG_F7:
-            dwarfReg = 71;
+            dwarfReg = 39;
             break;
         case REG_F8:
-            dwarfReg = 72;
+            dwarfReg = 40;
             break;
         case REG_F9:
-            dwarfReg = 73;
+            dwarfReg = 41;
             break;
         case REG_F10:
-            dwarfReg = 74;
+            dwarfReg = 42;
             break;
         case REG_F11:
-            dwarfReg = 75;
+            dwarfReg = 43;
             break;
         case REG_F12:
-            dwarfReg = 76;
+            dwarfReg = 44;
             break;
         case REG_F13:
-            dwarfReg = 77;
+            dwarfReg = 45;
             break;
         case REG_F14:
-            dwarfReg = 78;
+            dwarfReg = 46;
             break;
         case REG_F15:
-            dwarfReg = 79;
+            dwarfReg = 47;
             break;
         case REG_F16:
-            dwarfReg = 80;
+            dwarfReg = 48;
             break;
         case REG_F17:
-            dwarfReg = 81;
+            dwarfReg = 49;
             break;
         case REG_F18:
-            dwarfReg = 82;
+            dwarfReg = 50;
             break;
         case REG_F19:
-            dwarfReg = 83;
+            dwarfReg = 51;
             break;
         case REG_F20:
-            dwarfReg = 84;
+            dwarfReg = 52;
             break;
         case REG_F21:
-            dwarfReg = 85;
+            dwarfReg = 53;
             break;
         case REG_F22:
-            dwarfReg = 86;
+            dwarfReg = 54;
             break;
         case REG_F23:
-            dwarfReg = 87;
+            dwarfReg = 55;
             break;
         case REG_F24:
-            dwarfReg = 88;
+            dwarfReg = 56;
             break;
         case REG_F25:
-            dwarfReg = 89;
+            dwarfReg = 57;
             break;
         case REG_F26:
-            dwarfReg = 90;
+            dwarfReg = 58;
             break;
         case REG_F27:
-            dwarfReg = 91;
+            dwarfReg = 59;
             break;
         case REG_F28:
-            dwarfReg = 92;
+            dwarfReg = 60;
             break;
         case REG_F29:
-            dwarfReg = 93;
+            dwarfReg = 61;
             break;
         case REG_F30:
-            dwarfReg = 94;
+            dwarfReg = 62;
             break;
         case REG_F31:
-            dwarfReg = 95;
+            dwarfReg = 63;
             break;
 
         default:
@@ -516,7 +516,7 @@ void DumpUnwindInfo(Compiler*         comp,
     // pHeader is not guaranteed to be aligned. We put four 0xFF end codes at the end
     // to provide padding, and round down to get a multiple of 4 bytes in size.
     DWORD UNALIGNED* pdw = (DWORD UNALIGNED*)pHeader;
-    DWORD dw;
+    DWORD            dw;
 
     dw = *pdw++;
 
@@ -891,6 +891,8 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 void Compiler::unwindBegProlog()
 {
     assert(compGeneratingProlog);
+    assert(!compGeneratingUnwindProlog);
+    compGeneratingUnwindProlog = true;
 
 #if defined(FEATURE_CFI_SUPPORT)
     if (generateCFIUnwindCodes())
@@ -918,11 +920,15 @@ void Compiler::unwindBegProlog()
 void Compiler::unwindEndProlog()
 {
     assert(compGeneratingProlog);
+    assert(compGeneratingUnwindProlog);
+    compGeneratingUnwindProlog = false;
 }
 
 void Compiler::unwindBegEpilog()
 {
     assert(compGeneratingEpilog);
+    assert(!compGeneratingUnwindEpilog);
+    compGeneratingUnwindEpilog = true;
 
 #if defined(FEATURE_CFI_SUPPORT)
     if (generateCFIUnwindCodes())
@@ -937,6 +943,8 @@ void Compiler::unwindBegEpilog()
 void Compiler::unwindEndEpilog()
 {
     assert(compGeneratingEpilog);
+    assert(compGeneratingUnwindEpilog);
+    compGeneratingUnwindEpilog = false;
 }
 
 // The instructions between the last captured "current state" and the current instruction
@@ -1104,7 +1112,6 @@ void UnwindPrologCodes::SetFinalSize(int headerBytes, int epilogBytes)
                   &upcMem[upcCodeSlot], prologBytes);
 
         // Note that the three UWC_END padding bytes still exist at the end of the array.
-        CLANG_FORMAT_COMMENT_ANCHOR;
 
 #ifdef DEBUG
         // Zero out the epilog codes memory, to ensure we've copied the right bytes. Don't zero the padding bytes.
@@ -1141,9 +1148,9 @@ void UnwindPrologCodes::AppendEpilog(UnwindEpilogInfo* pEpi)
 
     int epiSize = pEpi->Size();
     memcpy_s(&upcMem[upcEpilogSlot], upcMemSize - upcEpilogSlot - 3, pEpi->GetCodes(),
-             epiSize); // -3 to avoid writing to the alignment padding
-    assert(pEpi->GetStartIndex() ==
-           upcEpilogSlot - upcCodeSlot); // Make sure we copied it where we expected to copy it.
+             epiSize);                                            // -3 to avoid writing to the alignment padding
+    assert(pEpi->GetStartIndex() == upcEpilogSlot - upcCodeSlot); // Make sure we copied it where we expected to copy
+                                                                  // it.
 
     upcEpilogSlot += epiSize;
     assert(upcEpilogSlot <= upcMemSize - 3);
@@ -1764,8 +1771,8 @@ void UnwindFragmentInfo::Finalize(UNATIVE_OFFSET functionLength)
 
     // Start writing the header
 
-    noway_assert(headerFunctionLength <=
-                 0x3FFFFU); // We create fragments to prevent this from firing, so if it hits, we have an internal error
+    noway_assert(headerFunctionLength <= 0x3FFFFU); // We create fragments to prevent this from firing, so if it hits,
+                                                    // we have an internal error
 
     if ((headerEpilogCount > UW_MAX_EPILOG_COUNT) || (headerCodeWords > UW_MAX_CODE_WORDS_COUNT))
     {
@@ -2043,7 +2050,7 @@ void UnwindInfo::HotColdSplitCodes(UnwindInfo* puwi)
 // so the fragment size will fit in the unwind data "Function Length" field.
 // The LOONGARCH Exception Data specification "Function Fragments" section describes this.
 // We split the function so that it is no larger than 512K bytes, or the value of
-// the COMPlus_JitSplitFunctionSize value, if defined (and smaller). We must determine
+// the DOTNET_JitSplitFunctionSize value, if defined (and smaller). We must determine
 // how to split the function/funclet before we issue the instructions, so we can
 // reserve the unwind space with the VM. The instructions issued may shrink (but not
 // expand!) during issuing (although this is extremely rare in any case, and may not
@@ -2063,7 +2070,7 @@ void UnwindInfo::Split()
     maxFragmentSize = UW_MAX_FRAGMENT_SIZE_BYTES;
 
 #ifdef DEBUG
-    // Consider COMPlus_JitSplitFunctionSize
+    // Consider DOTNET_JitSplitFunctionSize
     unsigned splitFunctionSize = (unsigned)JitConfig.JitSplitFunctionSize();
 
     if (splitFunctionSize != 0)
@@ -2131,7 +2138,6 @@ void UnwindInfo::Split()
     // the actual offsets of the splits since we haven't issued the instructions yet, so store
     // an emitter location instead of an offset, and "finalize" the offset in the unwindEmit() phase,
     // like we do for the function length and epilog offsets.
-    CLANG_FORMAT_COMMENT_ANCHOR;
 
 #ifdef DEBUG
     if (uwiComp->verbose)
@@ -2147,7 +2153,7 @@ void UnwindInfo::Split()
 
 #ifdef DEBUG
     // Did the emitter split the function/funclet into as many fragments as we asked for?
-    // It might be fewer if the COMPlus_JitSplitFunctionSize was used, but it better not
+    // It might be fewer if the DOTNET_JitSplitFunctionSize was used, but it better not
     // be fewer if we're splitting into 512K blocks!
 
     unsigned fragCount = 0;
@@ -2164,7 +2170,7 @@ void UnwindInfo::Split()
 
         // If this fires, then we split into fewer fragments than we asked for, and we are using
         // the default, unwind-data-defined 512K maximum fragment size. We won't be able to fit
-        // this fragment into the unwind data! If you set COMPlus_JitSplitFunctionSize to something
+        // this fragment into the unwind data! If you set DOTNET_JitSplitFunctionSize to something
         // small, we might not be able to split into as many fragments as asked for, because we
         // can't split prologs or epilogs.
         assert(maxFragmentSize != UW_MAX_FRAGMENT_SIZE_BYTES);

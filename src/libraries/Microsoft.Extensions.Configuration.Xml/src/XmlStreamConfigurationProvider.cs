@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -11,24 +12,30 @@ using System.Xml;
 namespace Microsoft.Extensions.Configuration.Xml
 {
     /// <summary>
-    /// An XML file based <see cref="IConfigurationProvider"/>.
+    /// Provides configuration key-value pairs that are obtained from an XML stream.
     /// </summary>
+    [RequiresDynamicCode(XmlDocumentDecryptor.RequiresDynamicCodeMessage)]
+    [RequiresUnreferencedCode(XmlDocumentDecryptor.RequiresUnreferencedCodeMessage)]
     public class XmlStreamConfigurationProvider : StreamConfigurationProvider
     {
-        private const string NameAttributeKey = "Name";
+        // work around https://github.com/dotnet/runtime/issues/81864 by splitting this into a separate class.
+        internal static class Consts
+        {
+            internal const string NameAttributeKey = "Name";
+        }
 
         /// <summary>
-        /// Constructor.
+        /// Initializes a new instance of the <see cref="XmlStreamConfigurationProvider"/> class.
         /// </summary>
         /// <param name="source">The <see cref="XmlStreamConfigurationSource"/>.</param>
         public XmlStreamConfigurationProvider(XmlStreamConfigurationSource source) : base(source) { }
 
         /// <summary>
-        /// Read a stream of XML values into a key/value dictionary.
+        /// Reads a stream of XML values into a key/value dictionary.
         /// </summary>
         /// <param name="stream">The stream of XML data.</param>
         /// <param name="decryptor">The <see cref="XmlDocumentDecryptor"/> to use to decrypt.</param>
-        /// <returns>The <see cref="IDictionary{String, String}"/> which was read from the stream.</returns>
+        /// <returns>The <see cref="IDictionary{String, String}"/> that was read from the stream.</returns>
         public static IDictionary<string, string?> Read(Stream stream, XmlDocumentDecryptor decryptor)
         {
             var readerSettings = new XmlReaderSettings()
@@ -227,7 +234,7 @@ namespace Microsoft.Extensions.Configuration.Xml
 
             while (reader.MoveToNextAttribute())
             {
-                if (string.Equals(reader.LocalName, NameAttributeKey, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(reader.LocalName, Consts.NameAttributeKey, StringComparison.OrdinalIgnoreCase))
                 {
                     // If there is a namespace attached to current attribute
                     if (!string.IsNullOrEmpty(reader.NamespaceURI))
@@ -245,7 +252,7 @@ namespace Microsoft.Extensions.Configuration.Xml
             return name;
         }
 
-        private static IDictionary<string, string?> ProvideConfiguration(XmlConfigurationElement? root)
+        private static Dictionary<string, string?> ProvideConfiguration(XmlConfigurationElement? root)
         {
             Dictionary<string, string?> configuration = new(StringComparer.OrdinalIgnoreCase);
 
@@ -352,7 +359,7 @@ namespace Microsoft.Extensions.Configuration.Xml
                 var hasName = !string.IsNullOrEmpty(child.Name);
                 if (hasName)
                 {
-                    prefix.Push(child.Name);
+                    prefix.Push(child.Name!);
                 }
 
                 // Add index to the prefix

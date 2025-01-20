@@ -26,6 +26,7 @@ namespace System.Net.WebSockets
         public override System.Threading.Tasks.ValueTask<System.Net.WebSockets.ValueWebSocketReceiveResult> ReceiveAsync(System.Memory<byte> buffer, System.Threading.CancellationToken cancellationToken) { throw null; }
         public override System.Threading.Tasks.Task SendAsync(System.ArraySegment<byte> buffer, System.Net.WebSockets.WebSocketMessageType messageType, bool endOfMessage, System.Threading.CancellationToken cancellationToken) { throw null; }
         public override System.Threading.Tasks.ValueTask SendAsync(System.ReadOnlyMemory<byte> buffer, System.Net.WebSockets.WebSocketMessageType messageType, bool endOfMessage, System.Threading.CancellationToken cancellationToken) { throw null; }
+        public override System.Threading.Tasks.ValueTask SendAsync(System.ReadOnlyMemory<byte> buffer, System.Net.WebSockets.WebSocketMessageType messageType, System.Net.WebSockets.WebSocketMessageFlags messageFlags, System.Threading.CancellationToken cancellationToken) { throw null; }
     }
     public sealed partial class ClientWebSocketOptions
     {
@@ -40,6 +41,8 @@ namespace System.Net.WebSockets
         public System.Net.ICredentials? Credentials { get { throw null; } set { } }
         [System.Runtime.Versioning.UnsupportedOSPlatformAttribute("browser")]
         public System.TimeSpan KeepAliveInterval { get { throw null; } set { } }
+        [System.Runtime.Versioning.UnsupportedOSPlatformAttribute("browser")]
+        public System.TimeSpan KeepAliveTimeout  { get { throw null; } set { } }
         [System.Runtime.Versioning.UnsupportedOSPlatformAttribute("browser")]
         public System.Net.WebSockets.WebSocketDeflateOptions? DangerousDeflateOptions { get { throw null; } set { } }
         [System.Runtime.Versioning.UnsupportedOSPlatformAttribute("browser")]

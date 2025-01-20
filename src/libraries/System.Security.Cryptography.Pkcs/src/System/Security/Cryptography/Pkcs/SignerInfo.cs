@@ -262,7 +262,7 @@ namespace System.Security.Cryptography.Pkcs
             return new SignerInfoCollection(signerInfos.ToArray());
         }
 
-#if NETCOREAPP
+#if NET
         [Obsolete(Obsoletions.SignerInfoCounterSigMessage, DiagnosticId = Obsoletions.SignerInfoCounterSigDiagId, UrlFormat = Obsoletions.SharedUrlFormat)]
  #endif
         [EditorBrowsable(EditorBrowsableState.Never)]
@@ -550,7 +550,17 @@ namespace System.Security.Cryptography.Pkcs
         {
             HashAlgorithmName hashAlgorithmName = GetDigestAlgorithm();
 
-            IncrementalHash hasher = IncrementalHash.CreateHash(hashAlgorithmName);
+
+            IncrementalHash hasher;
+
+            try
+            {
+                hasher = IncrementalHash.CreateHash(hashAlgorithmName);
+            }
+            catch (PlatformNotSupportedException ex)
+            {
+                throw new CryptographicException(SR.Format(SR.Cryptography_UnknownHashAlgorithm, hashAlgorithmName), ex);
+            }
 
             if (_parentSignerInfo == null)
             {
@@ -643,7 +653,15 @@ namespace System.Security.Cryptography.Pkcs
                     {
                         writer.PopSetOf();
 
+#if NET9_0_OR_GREATER
+                        writer.Encode(hasher, static (hasher, encoded) =>
+                        {
+                            hasher.AppendData(encoded);
+                            return (object?)null;
+                        });
+#else
                         hasher.AppendData(writer.Encode());
+#endif
                     }
                 }
             }
@@ -689,14 +707,26 @@ namespace System.Security.Cryptography.Pkcs
             if (!verifySignatureOnly)
             {
                 X509Chain chain = new X509Chain();
-                chain.ChainPolicy.ExtraStore.AddRange(extraStore);
-                chain.ChainPolicy.RevocationMode = X509RevocationMode.Online;
-                chain.ChainPolicy.RevocationFlag = X509RevocationFlag.ExcludeRoot;
-
-                if (!chain.Build(certificate))
+                try
                 {
-                    X509ChainStatus status = chain.ChainStatus.FirstOrDefault();
-                    throw new CryptographicException(SR.Cryptography_Cms_TrustFailure, status.StatusInformation);
+                    chain.ChainPolicy.ExtraStore.AddRange(extraStore);
+                    chain.ChainPolicy.RevocationMode = X509RevocationMode.Online;
+                    chain.ChainPolicy.RevocationFlag = X509RevocationFlag.ExcludeRoot;
+
+                    if (!chain.Build(certificate))
+                    {
+                        X509ChainStatus status = chain.ChainStatus.FirstOrDefault();
+                        throw new CryptographicException(SR.Cryptography_Cms_TrustFailure, status.StatusInformation);
+                    }
+                }
+                finally
+                {
+                    for (int i = 0; i < chain.ChainElements.Count; i++)
+                    {
+                        chain.ChainElements[i].Certificate.Dispose();
+                    }
+
+                    chain.Dispose();
                 }
 
                 // .NET Framework checks for either of these
@@ -736,7 +766,7 @@ namespace System.Security.Cryptography.Pkcs
                     return false;
                 }
 
-#if NETCOREAPP || NETSTANDARD2_1
+#if NET || NETSTANDARD2_1
                 // SHA-2-512 is the biggest digest type we know about.
                 Span<byte> digestValue = stackalloc byte[512 / 8];
                 ReadOnlySpan<byte> digest = digestValue;

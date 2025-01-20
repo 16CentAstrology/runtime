@@ -794,7 +794,7 @@ __checkReturn
 HRESULT MDInternalRO::FindMethodDef(    // S_OK or error.
     mdTypeDef   classdef,               // The owning class of the member.
     LPCSTR      szName,                 // Name of the member in utf8.
-    PCCOR_SIGNATURE pvSigBlob,          // [IN] point to a blob value of COM+ signature
+    PCCOR_SIGNATURE pvSigBlob,          // [IN] point to a blob value of signature
     ULONG       cbSigBlob,              // [IN] count of bytes in the signature blob
     mdMethodDef *pmethoddef)            // Put MemberDef token here.
 {
@@ -815,7 +815,7 @@ __checkReturn
 HRESULT MDInternalRO::FindMethodDefUsingCompare(    // S_OK or error.
     mdTypeDef   classdef,               // The owning class of the member.
     LPCSTR      szName,                 // Name of the member in utf8.
-    PCCOR_SIGNATURE pvSigBlob,          // [IN] point to a blob value of COM+ signature
+    PCCOR_SIGNATURE pvSigBlob,          // [IN] point to a blob value of signature
     ULONG       cbSigBlob,              // [IN] count of bytes in the signature blob
     PSIGCOMPARE SigCompare,            // [IN] Signature comparison routine
     void*       pSigArgs,               // [IN] Additional arguments passed to signature compare
@@ -1050,7 +1050,7 @@ __checkReturn
 HRESULT
 MDInternalRO::GetNameAndSigOfMethodDef(
     mdMethodDef      methoddef,         // [IN] given memberdef
-    PCCOR_SIGNATURE *ppvSigBlob,        // [OUT] point to a blob value of COM+ signature
+    PCCOR_SIGNATURE *ppvSigBlob,        // [OUT] point to a blob value of signature
     ULONG           *pcbSigBlob,        // [OUT] count of bytes in the signature blob
     LPCSTR          *pszMethodName)
 {
@@ -1675,9 +1675,6 @@ HRESULT MDInternalRO::GetMethodSpecProps(         // S_OK or error.
     HRESULT         hr = NOERROR;
     MethodSpecRec  *pMethodSpecRec;
 
-    LOG((LOGMD, "MD RegMeta::GetMethodSpecProps(0x%08x, 0x%08x, 0x%08x, 0x%08x)\n",
-        mi, tkParent, ppvSigBlob, pcbSigBlob));
-
     _ASSERTE(TypeFromToken(mi) == mdtMethodSpec);
 
     IfFailRet(m_LiteWeightStgdb.m_MiniMd.GetMethodSpecRecord(RidFromToken(mi), &pMethodSpecRec));
@@ -1815,7 +1812,7 @@ __checkReturn
 HRESULT
 MDInternalRO::GetNameAndSigOfMemberRef( // meberref's name
     mdMemberRef      memberref,         // given a memberref
-    PCCOR_SIGNATURE *ppvSigBlob,        // [OUT] point to a blob value of COM+ signature
+    PCCOR_SIGNATURE *ppvSigBlob,        // [OUT] point to a blob value of signature
     ULONG           *pcbSigBlob,        // [OUT] count of bytes in the signature blob
     LPCSTR          *pszMemberRefName)
 {
@@ -3068,7 +3065,7 @@ __checkReturn
 HRESULT MDInternalRO::ConvertTextSigToComSig(// Return hresult.
     BOOL        fCreateTrIfNotFound,    // create typeref if not found or not
     LPCSTR      pSignature,             // class file format signature
-    CQuickBytes *pqbNewSig,             // [OUT] place holder for COM+ signature
+    CQuickBytes *pqbNewSig,             // [OUT] place holder for signature
     ULONG       *pcbCount)              // [OUT] the result size of signature
 {
     return E_NOTIMPL;
@@ -3150,7 +3147,6 @@ mdModule MDInternalRO::GetModuleFromScope(void)
 
 //*****************************************************************************
 // Fill a variant given a MDDefaultValue
-// This routine will create a bstr if the ELEMENT_TYPE of default value is STRING
 //*****************************************************************************
 __checkReturn
 HRESULT _FillMDDefaultValue(
@@ -3221,7 +3217,7 @@ HRESULT _FillMDDefaultValue(
             {
                 IfFailGo(CLDB_E_FILE_CORRUPT);
             }
-            __int32 Value = GET_UNALIGNED_VAL32(pValue);
+            int32_t Value = GET_UNALIGNED_VAL32(pValue);
             pMDDefaultValue->m_fltValue = (float &)Value;
         }
         break;
@@ -3231,7 +3227,7 @@ HRESULT _FillMDDefaultValue(
             {
                 IfFailGo(CLDB_E_FILE_CORRUPT);
             }
-            __int64 Value = GET_UNALIGNED_VAL64(pValue);
+            int64_t Value = GET_UNALIGNED_VAL64(pValue);
             pMDDefaultValue->m_dblValue = (double &) Value;
         }
         break;
@@ -3239,19 +3235,7 @@ HRESULT _FillMDDefaultValue(
         if (cbValue == 0)
             pValue = NULL;
 
-#if BIGENDIAN
-        {
-            // We need to allocate and swap the string if we're on a big endian
-            // This allocation will be freed by the MDDefaultValue destructor.
-            pMDDefaultValue->m_wzValue = new WCHAR[(cbValue + 1) / sizeof (WCHAR)];
-            IfNullGo(pMDDefaultValue->m_wzValue);
-            memcpy(const_cast<WCHAR *>(pMDDefaultValue->m_wzValue), pValue, cbValue);
-            _ASSERTE(cbValue % sizeof(WCHAR) == 0);
-            SwapStringLength(const_cast<WCHAR *>(pMDDefaultValue->m_wzValue), cbValue / sizeof(WCHAR));
-        }
-#else
         pMDDefaultValue->m_wzValue = (LPWSTR) pValue;
-#endif
         break;
     case ELEMENT_TYPE_CLASS:
         //

@@ -18,6 +18,14 @@ Source generators and analyzers can be included in the shared framework by addin
 
 Removing a library from the shared framework is a breaking change and should be avoided.
 
+### References to libraries in the shared framework that produce packages
+
+It's beneficial to avoid project references to libraries that are in the shared framework because it makes the package graph smaller which reduces the number of packages that require servicing and the number of libraries that end up being copied into the application directory.
+
+If a dependency is part of the shared framework a project/package reference is never required on the latest version (`NetCoreAppCurrent`).  A reference is required for previous .NET versions even if the dependency is part of the shared framework if the project you are building targets .NETStandard and references the project there.  You may completely avoid a package dependency on .NETStandard and .NET if it's not needed for .NETStandard (for example - if it is an implementation only dependency and you're building a PNSE assembly for .NETStandard).
+
+Warning NETPKG0001 is emitted when you have an unnecessary reference to a library that is part of the shared framework.  To avoid this warning, make sure your ProjectReference is conditioned so that it doesn't apply on `NetCoreAppCurrent`.
+
 ## Transport package
 
 Transport packages are non-shipping packages that dotnet/runtime produces in order to share binaries with other repositories.
@@ -40,21 +48,64 @@ Libraries to be packaged must set `IsPackable` to true. By default, all `librari
 
 Package versions and shipping state should be controlled using the properties defined by the [Arcade SDK](https://github.com/dotnet/arcade/blob/master/Documentation/ArcadeSdk.md#project-properties-defined-by-the-sdk). Typically libraries should not need to explicitly set any of these properties.
 
-Most metadata for packages is controlled centrally in the repository and individual projects may not need to make any changes to these. One property is required to be set in each project: `PackageDescription`. This should be set to a descriptive summary of the purpose of the package, and a list of common entry-point types for the package: to aide in search engine optimization. Example:
-```xml
-<PackageDescription>Logging abstractions for Microsoft.Extensions.Logging.
+Most metadata for packages is controlled centrally in the repository and individual projects may not need to make any changes to these. One property is required to be set in each project: `PackageDescription`. This should be set to a descriptive summary of the purpose of the package. Example:
 
-Commonly Used Types:
-Microsoft.Extensions.Logging.ILogger
-Microsoft.Extensions.Logging.ILoggerFactory
-Microsoft.Extensions.Logging.ILogger&lt;TCategoryName&gt;
-Microsoft.Extensions.Logging.LogLevel
-Microsoft.Extensions.Logging.Logger&lt;T&gt;
-Microsoft.Extensions.Logging.LoggerMessage
-Microsoft.Extensions.Logging.Abstractions.NullLogger</PackageDescription>
+```xml
+<PackageDescription>Logging abstractions for Microsoft.Extensions.Logging.</PackageDescription>
 ```
 
-Package content can be defined using any of the publicly defined Pack inputs: https://docs.microsoft.com/en-us/nuget/reference/msbuild-targets
+Package content can be defined using any of the publicly defined Pack inputs: https://learn.microsoft.com/nuget/reference/msbuild-targets
+
+### Package Readme
+
+Packages can include a Markdown Readme file with a short usage documentation. To include a package Readme, create a `PACKAGE.md` file in the library `src` directory. The file will be automatically included in the package and used as a Readme if its name matches this convention.
+
+The package Readme is displayed on the package details page on [NuGet gallery](https://nuget.org/). You can include the following content in it:
+
+- A description of the package purpose.
+- A list of package key features
+- A code example that demostrates how to use the package.
+- Information when package should be used. For example, if the library is included in the shared framework in .NET, but needs to be installed via NuGet on .NET Framework, it should be mentioned.
+- A list of common entry-point types for the package, with links to their API docs under [.NET API Browser](https://learn.microsoft.com/dotnet/api/).
+- Links to related documentation.
+- Information about how to provide feedback on the package and contribute to it.
+
+Use the following Markdown template for a package Readme:
+
+```
+## About
+
+<!-- A description of the package and where one can find more documentation -->
+
+## Key Features
+
+<!-- The key features of this package -->
+
+## How to Use
+
+<!-- A compelling example on how to use this package with code, as well as any specific guidelines for when to use the package -->
+
+## Main Types
+
+<!-- The main types provided in this library -->
+
+## Additional Documentation
+
+* [Conceptual documentation](...)
+* [API documentation](...)
+
+## Related Packages
+
+<!-- The related packages associated with this package -->
+
+## Feedback & Contributing
+
+<!-- How to provide feedback on this package and contribute to it -->
+
+ExamplePackage is released as open source under the [MIT license](https://licenses.nuget.org/MIT). Bug reports and contributions are welcome at [the GitHub repository](https://github.com/dotnet/runtime).
+```
+
+For a list of supported Markdown features, see [NuGet documentation](https://learn.microsoft.com/nuget/nuget-org/package-readme-on-nuget-org#supported-markdown-features).
 
 ### Build props / targets and other content
 
@@ -99,13 +150,13 @@ In order to mitigate design-time/build-time performance issues with source gener
 ### NETStandard Compatibility Error infrastructure
 For libraries that support .NETStandard, the _.NETStandard Compatibility packaging infrastructure_ makes sure that out-of-support target frameworks like _netcoreapp3.1_ or _net461_ are unsupported by the produced package. That enables library authors to support .NETStandard but explicitly not support unsupported .NETStandard compatible target frameworks.
 
-The infrastructure generates a targets file that throws a user readable Error when msbuild invokes a project with an unsupported target framework. In addition to the targets file, placeholder files `_._` are placed into the minimum supported .NETStandard compatible target framework's package folder (as time of writing `net6.0` and `net462`), so that the generated targets files don't apply for that and any newer/compatible target framework. Example:
+The infrastructure generates a targets file that throws a user readable Error when msbuild invokes a project with an unsupported target framework. In addition to the targets file, placeholder files `_._` are placed into the minimum supported .NETStandard compatible target framework's package folder (as time of writing `net8.0` and `net462`), so that the generated targets files don't apply for that and any newer/compatible target framework. Example:
 
 ```
 buildTransitive\net461\Microsoft.Extensions.Configuration.UserSecrets.targets            <- This file is generated and throws an Error
 buildTransitive\net462\_._
 buildTransitive\netcoreapp2.0\Microsoft.Extensions.Configuration.UserSecrets.targets     <- This file is generated and throws an Error
-buildTransitive\net6.0\_._
+buildTransitive\net8.0\_._
 ```
 
 Whenever a library wants to author their own set of props and targets files (i.e. for source generators) and the above mentioned infrastructure kicks in (because the library targets .NETStandard), such files **must be included not only for the .NETStandard target framework but also for the specific minimum supported target frameworks**. The _.NETStandard Compatibility packaging infrastructure_ then omits the otherwise necessary placeholder files. Example:
@@ -115,7 +166,7 @@ buildTransitive\netstandard2.0\Microsoft.Extensions.Configuration.UserSecrets.ta
 buildTransitive\net461\Microsoft.Extensions.Configuration.UserSecrets.targets            <- This file is generated and throws an Error
 buildTransitive\net462\Microsoft.Extensions.Configuration.UserSecrets.targets            <- This file is hand authored and doesn't throw an error
 buildTransitive\netcoreapp2.0\Microsoft.Extensions.Configuration.UserSecrets.targets     <- This file is generated and throws an Error
-buildTransitive\net6.0\Microsoft.Extensions.Configuration.UserSecrets.targets            <- This file is hand authored and doesn't throw an error
+buildTransitive\net8.0\Microsoft.Extensions.Configuration.UserSecrets.targets            <- This file is hand authored and doesn't throw an error
 ```
 
 The above layout is achieved via the following item declaration in the project file. In that case, the hand authored msbuild props and/or targets files are located in a buildTransitive folder in the project tree. Note that the trailing directory separators are required.

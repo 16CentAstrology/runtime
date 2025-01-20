@@ -9,12 +9,21 @@ using Xunit;
 
 namespace System.Security.Cryptography.Tests
 {
-    public class HmacSha384Tests : Rfc4231HmacTests
+    public class HmacSha384Tests : Rfc4231HmacTests<HmacSha384Tests.Traits>
     {
+        public sealed class Traits : IHmacTrait
+        {
+            public static bool IsSupported => true;
+            public static int HashSizeInBytes => HMACSHA384.HashSizeInBytes;
+        }
+
+
+        protected override HashAlgorithmName HashAlgorithm => HashAlgorithmName.SHA384;
         protected override int BlockSize => 128;
         protected override int MacSize => HMACSHA384.HashSizeInBytes;
 
         protected override HMAC Create() => new HMACSHA384();
+        protected override HMAC Create(byte[] key) => new HMACSHA384(key);
         protected override HashAlgorithm CreateHashAlgorithm() => SHA384.Create();
         protected override byte[] HashDataOneShot(byte[] key, byte[] source) =>
             HMACSHA384.HashData(key, source);
@@ -150,7 +159,7 @@ namespace System.Security.Cryptography.Tests
         [Fact]
         public void HmacSha384_Stream_MultipleOf4096()
         {
-            // Verfied with:
+            // Verified with:
             // for _ in {1..1024}; do echo -n "0102030405060708"; done | openssl sha384 -hex -mac HMAC -macopt hexkey:000102030405060708090A0B0C0D0E0F
             VerifyRepeating(
                 input: "0102030405060708",
@@ -162,7 +171,7 @@ namespace System.Security.Cryptography.Tests
         [Fact]
         public void HmacSha384_Stream_NotMultipleOf4096()
         {
-            // Verfied with:
+            // Verified with:
             // for _ in {1..1025}; do echo -n "0102030405060708"; done | openssl sha384 -hex -mac HMAC -macopt hexkey:000102030405060708090A0B0C0D0E0F
             VerifyRepeating(
                 input: "0102030405060708",
@@ -174,7 +183,7 @@ namespace System.Security.Cryptography.Tests
         [Fact]
         public void HmacSha384_Stream_Empty()
         {
-            // Verfied with:
+            // Verified with:
             // echo -n "" | openssl sha384 -hex -mac HMAC -macopt hexkey:000102030405060708090A0B0C0D0E0F
             VerifyRepeating(
                 input: "",
@@ -186,7 +195,7 @@ namespace System.Security.Cryptography.Tests
         [Fact]
         public async Task HmacSha384_Stream_MultipleOf4096_Async()
         {
-            // Verfied with:
+            // Verified with:
             // for _ in {1..1024}; do echo -n "0102030405060708"; done | openssl sha384 -hex -mac HMAC -macopt hexkey:000102030405060708090A0B0C0D0E0F
             await VerifyRepeatingAsync(
                 input: "0102030405060708",
@@ -198,7 +207,7 @@ namespace System.Security.Cryptography.Tests
         [Fact]
         public async Task HmacSha384_Stream_NotMultipleOf4096_Async()
         {
-            // Verfied with:
+            // Verified with:
             // for _ in {1..1025}; do echo -n "0102030405060708"; done | openssl sha384 -hex -mac HMAC -macopt hexkey:000102030405060708090A0B0C0D0E0F
             await VerifyRepeatingAsync(
                 input: "0102030405060708",
@@ -210,13 +219,20 @@ namespace System.Security.Cryptography.Tests
         [Fact]
         public async Task HmacSha384_Stream_Empty_Async()
         {
-            // Verfied with:
+            // Verified with:
             // echo -n "" | openssl sha384 -hex -mac HMAC -macopt hexkey:000102030405060708090A0B0C0D0E0F
             await VerifyRepeatingAsync(
                 input: "",
                 0,
                 hexKey: "000102030405060708090A0B0C0D0E0F",
                 output: "6A0FDC1C54C664AD91C7C157D2670C5D44E4D44EBAD2359A0206974C7088B1A867F76971E6C240C33B33A66BA295BB56");
+        }
+
+        [Fact]
+        public void HmacSha384_HashSizes()
+        {
+            Assert.Equal(384, HMACSHA384.HashSizeInBits);
+            Assert.Equal(48, HMACSHA384.HashSizeInBytes);
         }
     }
 }

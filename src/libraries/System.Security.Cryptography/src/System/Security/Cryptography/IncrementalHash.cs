@@ -1,9 +1,9 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using Internal.Cryptography;
 using System.Diagnostics;
 using System.Runtime.Versioning;
+using Internal.Cryptography;
 
 namespace System.Security.Cryptography
 {
@@ -64,7 +64,7 @@ namespace System.Security.Cryptography
         }
 
         /// <summary>
-        /// Append <paramref name="count"/> bytes of <paramref name="data"/>, starting at <paramref name="offset"/>,
+        /// Appends <paramref name="count"/> bytes of <paramref name="data"/>, starting at <paramref name="offset"/>,
         /// to the data already processed in the hash or HMAC.
         /// </summary>
         /// <param name="data">The data to process.</param>
@@ -87,10 +87,9 @@ namespace System.Security.Cryptography
         {
             ArgumentNullException.ThrowIfNull(data);
 
-            if (offset < 0)
-                throw new ArgumentOutOfRangeException(nameof(offset), SR.ArgumentOutOfRange_NeedNonNegNum);
-            if (count < 0 || (count > data.Length))
-                throw new ArgumentOutOfRangeException(nameof(count));
+            ArgumentOutOfRangeException.ThrowIfNegative(offset);
+            ArgumentOutOfRangeException.ThrowIfNegative(count);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(count, data.Length);
             if ((data.Length - count) < offset)
                 throw new ArgumentException(SR.Argument_InvalidOffLen);
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -114,9 +113,8 @@ namespace System.Security.Cryptography
         }
 
         /// <summary>
-        /// Retrieve the hash or HMAC for the data accumulated from prior calls to
-        /// <see cref="AppendData(byte[])"/>, and return to the state the object
-        /// was in at construction.
+        /// Retrieves the hash or HMAC for the data accumulated from prior calls to
+        /// <see cref="AppendData(byte[])"/>, and resets the object to its initial state.
         /// </summary>
         /// <returns>The computed hash or HMAC.</returns>
         /// <exception cref="ObjectDisposedException">The object has already been disposed.</exception>
@@ -240,7 +238,7 @@ namespace System.Security.Cryptography
         ///   The buffer to receive the hash or HMAC value.
         /// </param>
         /// <param name="bytesWritten">
-        ///   When this method returns, the total number of bytes written into <paramref name="destination" />.
+        ///   When this method returns, contains the total number of bytes written into <paramref name="destination" />.
         ///   This parameter is treated as uninitialized.
         /// </param>
         /// <returns>
@@ -273,6 +271,22 @@ namespace System.Security.Cryptography
         }
 
         /// <summary>
+        /// Creates a new instance of <see cref="IncrementalHash" /> with the existing appended data preserved.
+        /// </summary>
+        /// <returns>A clone of the current instance.</returns>
+        /// <exception cref="CryptographicException">An error occurred during the operation.</exception>
+        /// <exception cref="ObjectDisposedException">The object has already been disposed.</exception>
+        public IncrementalHash Clone()
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            Debug.Assert((_hash != null) ^ (_hmac != null));
+
+            return _hash is not null ?
+                new IncrementalHash(_algorithmName, _hash.Clone()) :
+                new IncrementalHash(_algorithmName, _hmac!.Clone());
+        }
+
+        /// <summary>
         /// Release all resources used by the current instance of the
         /// <see cref="IncrementalHash"/> class.
         /// </summary>
@@ -294,7 +308,7 @@ namespace System.Security.Cryptography
         }
 
         /// <summary>
-        /// Create an <see cref="IncrementalHash"/> for the algorithm specified by <paramref name="hashAlgorithm"/>.
+        /// Creates an <see cref="IncrementalHash"/> for the algorithm specified by <paramref name="hashAlgorithm"/>.
         /// </summary>
         /// <param name="hashAlgorithm">The name of the hash algorithm to perform.</param>
         /// <returns>
@@ -309,20 +323,21 @@ namespace System.Security.Cryptography
         public static IncrementalHash CreateHash(HashAlgorithmName hashAlgorithm)
         {
             ArgumentException.ThrowIfNullOrEmpty(hashAlgorithm.Name, nameof(hashAlgorithm));
+            CheckSha3Support(hashAlgorithm.Name);
 
             return new IncrementalHash(hashAlgorithm, HashProviderDispenser.CreateHashProvider(hashAlgorithm.Name));
         }
 
         /// <summary>
-        /// Create an <see cref="IncrementalHash"/> for the Hash-based Message Authentication Code (HMAC)
-        /// algorithm utilizing the hash algorithm specified by <paramref name="hashAlgorithm"/>, and a
+        /// Creates an <see cref="IncrementalHash"/> for the Hash-based Message Authentication Code (HMAC)
+        /// algorithm using the hash algorithm specified by <paramref name="hashAlgorithm"/> and a
         /// key specified by <paramref name="key"/>.
         /// </summary>
         /// <param name="hashAlgorithm">The name of the hash algorithm to perform within the HMAC.</param>
         /// <param name="key">
         ///     The secret key for the HMAC. The key can be any length, but a key longer than the output size
         ///     of the hash algorithm specified by <paramref name="hashAlgorithm"/> will be hashed (using the
-        ///     algorithm specified by <paramref name="hashAlgorithm"/>) to derive a correctly-sized key. Therefore,
+        ///     algorithm specified by <paramref name="hashAlgorithm"/>) to derive a correctly sized key. Therefore,
         ///     the recommended size of the secret key is the output size of the hash specified by
         ///     <paramref name="hashAlgorithm"/>.
         /// </param>
@@ -343,15 +358,15 @@ namespace System.Security.Cryptography
         }
 
         /// <summary>
-        /// Create an <see cref="IncrementalHash"/> for the Hash-based Message Authentication Code (HMAC)
-        /// algorithm utilizing the hash algorithm specified by <paramref name="hashAlgorithm"/>, and a
+        /// Creates an <see cref="IncrementalHash"/> for the Hash-based Message Authentication Code (HMAC)
+        /// algorithm using the hash algorithm specified by <paramref name="hashAlgorithm"/> and a
         /// key specified by <paramref name="key"/>.
         /// </summary>
         /// <param name="hashAlgorithm">The name of the hash algorithm to perform within the HMAC.</param>
         /// <param name="key">
         ///     The secret key for the HMAC. The key can be any length, but a key longer than the output size
         ///     of the hash algorithm specified by <paramref name="hashAlgorithm"/> will be hashed (using the
-        ///     algorithm specified by <paramref name="hashAlgorithm"/>) to derive a correctly-sized key. Therefore,
+        ///     algorithm specified by <paramref name="hashAlgorithm"/>) to derive a correctly sized key. Therefore,
         ///     the recommended size of the secret key is the output size of the hash specified by
         ///     <paramref name="hashAlgorithm"/>.
         /// </param>
@@ -367,8 +382,28 @@ namespace System.Security.Cryptography
         public static IncrementalHash CreateHMAC(HashAlgorithmName hashAlgorithm, ReadOnlySpan<byte> key)
         {
             ArgumentException.ThrowIfNullOrEmpty(hashAlgorithm.Name, nameof(hashAlgorithm));
+            CheckSha3Support(hashAlgorithm.Name);
 
             return new IncrementalHash(hashAlgorithm, new HMACCommon(hashAlgorithm.Name, key, -1));
+        }
+
+        private static void CheckSha3Support(string hashAlgorithmName)
+        {
+            switch (hashAlgorithmName)
+            {
+                case HashAlgorithmNames.SHA3_256 when !SHA3_256.IsSupported:
+                    Debug.Assert(!HMACSHA3_256.IsSupported);
+                    throw new PlatformNotSupportedException();
+                case HashAlgorithmNames.SHA3_384 when !SHA3_384.IsSupported:
+                    Debug.Assert(!HMACSHA3_384.IsSupported);
+                    throw new PlatformNotSupportedException();
+                case HashAlgorithmNames.SHA3_512 when !SHA3_512.IsSupported:
+                    Debug.Assert(!HMACSHA3_512.IsSupported);
+                    throw new PlatformNotSupportedException();
+                default:
+                    // Other unknown algorithms will be handled separately as CryptographicExceptions.
+                    break;
+            }
         }
     }
 }

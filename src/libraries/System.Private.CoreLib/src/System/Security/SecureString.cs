@@ -26,14 +26,8 @@ namespace System.Security
         {
             ArgumentNullException.ThrowIfNull(value);
 
-            if (length < 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(length), SR.ArgumentOutOfRange_NeedNonNegNum);
-            }
-            if (length > MaxLength)
-            {
-                throw new ArgumentOutOfRangeException(nameof(length), SR.ArgumentOutOfRange_Length);
-            }
+            ArgumentOutOfRangeException.ThrowIfNegative(length);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(length, MaxLength);
 
             Initialize(new ReadOnlySpan<char>(value, length));
         }
@@ -384,7 +378,7 @@ namespace System.Security
                     {
                         Span<char> resultSpan = new Span<char>((void*)ptr, byteLength / sizeof(char));
                         span.CopyTo(resultSpan);
-                        resultSpan[resultSpan.Length - 1] = '\0';
+                        resultSpan[^1] = '\0';
                     }
                     else
                     {

@@ -151,7 +151,6 @@
 #include "../dlls/mscorrc/resource.h"
 #include "util.hpp"
 #include "shimload.h"
-#include "comthreadpool.h"
 #include "posterror.h"
 #include "virtualcallstub.h"
 #include "strongnameinternal.h"
@@ -162,6 +161,8 @@
 #include "disassembler.h"
 #include "jithost.h"
 #include "pgo.h"
+#include "pendingload.h"
+#include "cdacplatformmetadata.hpp"
 
 #ifndef TARGET_UNIX
 #include "dwreport.h"
@@ -170,13 +171,8 @@
 #include "stringarraylist.h"
 #include "stubhelpers.h"
 
-#ifdef FEATURE_STACK_SAMPLING
-#include "stacksampler.h"
-#endif
-
 #ifdef FEATURE_COMINTEROP
 #include "runtimecallablewrapper.h"
-#include "mngstdinterfaces.h"
 #include "interoplibinterface.h"
 #endif // FEATURE_COMINTEROP
 
@@ -189,16 +185,16 @@
 #include "profilinghelper.h"
 #endif // PROFILING_SUPPORTED
 
-#ifdef FEATURE_INTERPRETER
-#include "interpreter.h"
-#endif // FEATURE_INTERPRETER
-
 #ifdef FEATURE_PERFMAP
 #include "perfmap.h"
 #endif
 
 #include "diagnosticserveradapter.h"
 #include "eventpipeadapter.h"
+
+#if defined(FEATURE_PERFTRACING) && defined(TARGET_LINUX)
+#include "user_events.h"
+#endif // defined(FEATURE_PERFTRACING) && defined(TARGET_LINUX)
 
 #ifndef TARGET_UNIX
 // Included for referencing __security_cookie
@@ -228,13 +224,12 @@ extern "C" HRESULT __cdecl CorDBGetInterface(DebugInterface** rcInterface);
 
 // g_coreclr_embedded indicates that coreclr is linked directly into the program
 // g_hostpolicy_embedded indicates that the hostpolicy library is linked directly into the executable
-// Note: that it can happen that the hostpolicy is embedded but coreclr isn't (on Windows singlefilehost is built that way)
 #ifdef CORECLR_EMBEDDED
 bool g_coreclr_embedded = true;
 bool g_hostpolicy_embedded = true; // We always embed hostpolicy if coreclr is also embedded
 #else
 bool g_coreclr_embedded = false;
-bool g_hostpolicy_embedded = false; // In this case the value may come from a runtime property and may change
+bool g_hostpolicy_embedded = false;
 #endif
 
 // Remember how the last startup of EE went.
@@ -396,6 +391,23 @@ BOOL g_singleVersionHosting;
 typedef BOOL(WINAPI* PINITIALIZECONTEXT2)(PVOID Buffer, DWORD ContextFlags, PCONTEXT* Context, PDWORD ContextLength, ULONG64 XStateCompactionMask);
 PINITIALIZECONTEXT2 g_pfnInitializeContext2 = NULL;
 
+#ifdef TARGET_ARM64
+typedef DWORD64(WINAPI* PGETENABLEDXSTATEFEATURES)();
+PGETENABLEDXSTATEFEATURES g_pfnGetEnabledXStateFeatures = NULL;
+
+typedef BOOL(WINAPI* PGETXSTATEFEATURESMASK)(PCONTEXT Context, PDWORD64 FeatureMask);
+PGETXSTATEFEATURESMASK g_pfnGetXStateFeaturesMask = NULL;
+
+typedef BOOL(WINAPI* PSETXSTATEFEATURESMASK)(PCONTEXT Context, DWORD64 FeatureMask);
+PSETXSTATEFEATURESMASK g_pfnSetXStateFeaturesMask = NULL;
+#endif // TARGET_ARM64
+
+static BOOLEAN WINAPI RtlDllShutdownInProgressFallback()
+{
+    return g_fProcessDetach;
+}
+PRTLDLLSHUTDOWNINPROGRESS g_pfnRtlDllShutdownInProgress = &RtlDllShutdownInProgressFallback;
+
 #ifdef TARGET_X86
 typedef VOID(__cdecl* PRTLRESTORECONTEXT)(PCONTEXT ContextRecord, struct _EXCEPTION_RECORD* ExceptionRecord);
 PRTLRESTORECONTEXT g_pfnRtlRestoreContext = NULL;
@@ -406,8 +418,18 @@ void InitializeOptionalWindowsAPIPointers()
     HMODULE hm = GetModuleHandleW(_T("kernel32.dll"));
     g_pfnInitializeContext2 = (PINITIALIZECONTEXT2)GetProcAddress(hm, "InitializeContext2");
 
-#ifdef TARGET_X86
+#ifdef TARGET_ARM64
+    g_pfnGetEnabledXStateFeatures = (PGETENABLEDXSTATEFEATURES)GetProcAddress(hm, "GetEnabledXStateFeatures");
+    g_pfnGetXStateFeaturesMask = (PGETXSTATEFEATURESMASK)GetProcAddress(hm, "GetXStateFeaturesMask");
+    g_pfnSetXStateFeaturesMask = (PSETXSTATEFEATURESMASK)GetProcAddress(hm, "SetXStateFeaturesMask");
+#endif // TARGET_ARM64
+
     hm = GetModuleHandleW(_T("ntdll.dll"));
+    PRTLDLLSHUTDOWNINPROGRESS pfn = (PRTLDLLSHUTDOWNINPROGRESS)GetProcAddress(hm, "RtlDllShutdownInProgress");
+    if (pfn != NULL)
+        g_pfnRtlDllShutdownInProgress = pfn;
+
+#ifdef TARGET_X86
     g_pfnRtlRestoreContext = (PRTLRESTORECONTEXT)GetProcAddress(hm, "RtlRestoreContext");
 #endif //TARGET_X86
 }
@@ -548,7 +570,11 @@ void EESocketCleanupHelper(bool isExecutingOnAltStack)
 
     if (isExecutingOnAltStack)
     {
-        GetThread()->SetExecutingOnAltStack();
+        Thread *pThread = GetThreadNULLOk();
+        if (pThread)
+        {
+             pThread->SetExecutingOnAltStack();
+        }
     }
 
     // Close the debugger transport socket first
@@ -594,6 +620,7 @@ void EEStartupHelper()
 
         // We cache the SystemInfo for anyone to use throughout the life of the EE.
         GetSystemInfo(&g_SystemInfo);
+        CDacPlatformMetadata::Init();
 
         // Set callbacks so that LoadStringRC knows which language our
         // threads are in so that it can return the proper localized string.
@@ -628,6 +655,8 @@ void EEStartupHelper()
         // This needs to be done before the EE has started
         InitializeStartupFlags();
 
+        PendingTypeLoadTable::Init();
+
         IfFailGo(ExecutableAllocator::StaticInitialize(FatalErrorHandler));
 
         Thread::StaticInitialize();
@@ -638,6 +667,7 @@ void EEStartupHelper()
         TieredCompilationManager::StaticInitialize();
         CallCountingManager::StaticInitialize();
         OnStackReplacementManager::StaticInitialize();
+        MethodTable::InitMethodDataCache();
 
 #ifdef TARGET_UNIX
         ExecutableAllocator::InitPreferredRange();
@@ -658,6 +688,9 @@ void EEStartupHelper()
 #ifdef FEATURE_PERFTRACING
         // Initialize the event pipe.
         EventPipeAdapter::Initialize();
+#if defined(TARGET_LINUX)
+        InitUserEvents();
+#endif // TARGET_LINUX
 #endif // FEATURE_PERFTRACING
 
 #ifdef TARGET_UNIX
@@ -761,10 +794,6 @@ void EEStartupHelper()
         // Cache the (potentially user-overridden) values now so they are accessible from asm routines
         InitializeSpinConstants();
 
-#ifdef FEATURE_INTERPRETER
-        Interpreter::Initialize();
-#endif // FEATURE_INTERPRETER
-
         StubManager::InitializeStubManagers();
 
         // Set up the cor handle map. This map is used to load assemblies in
@@ -775,7 +804,6 @@ void EEStartupHelper()
 
         CoreLibBinder::Startup();
 
-        Stub::Init();
         StubLinkerCPU::Init();
         StubPrecode::StaticInitialize();
         FixupPrecode::StaticInitialize();
@@ -792,11 +820,9 @@ void EEStartupHelper()
 
         VirtualCallStubManager::InitStatic();
 
-
         // Setup the domains. Threads are started in a default domain.
 
         // Static initialization
-        BaseDomain::Attach();
         SystemDomain::Attach();
 
         // Start up the EE initializing all the global variables
@@ -807,7 +833,6 @@ void EEStartupHelper()
         ExecutionManager::Init();
 
         JitHost::Init();
-
 
 #ifndef TARGET_UNIX
         if (!RegisterOutOfProcessWatsonCallbacks())
@@ -870,12 +895,15 @@ void EEStartupHelper()
         // Set up the sync block
         SyncBlockCache::Start();
 
-        StackwalkCache::Init();
-
         // This isn't done as part of InitializeGarbageCollector() above because it
         // requires write barriers to have been set up on x86, which happens as part
         // of InitJITHelpers1.
         hr = g_pGCHeap->Initialize();
+        if (FAILED(hr))
+        {
+            LogErrorToHost("GC heap initialization failed with error 0x%08X", hr);
+        }
+
         IfFailGo(hr);
 
 #ifdef FEATURE_PERFTRACING
@@ -907,7 +935,6 @@ void EEStartupHelper()
         MethodDesc::Init();
 #endif
 
-
         Assembly::Initialize();
 
         SystemDomain::System()->Init();
@@ -927,18 +954,13 @@ void EEStartupHelper()
 
         SystemDomain::System()->DefaultDomain()->SetupSharedStatics();
 
-#ifdef FEATURE_STACK_SAMPLING
-        StackSampler::Init();
-#endif
-
-        // Perform any once-only SafeHandle initialization.
-        SafeHandle::Init();
+        InitializeThreadStaticData();
 
 #ifdef FEATURE_MINIMETADATA_IN_TRIAGEDUMPS
         // retrieve configured max size for the mini-metadata buffer (defaults to 64KB)
         g_MiniMetaDataBuffMaxSize = CLRConfig::GetConfigValue(CLRConfig::INTERNAL_MiniMdBufferCapacity);
         // align up to GetOsPageSize(), with a maximum of 1 MB
-        g_MiniMetaDataBuffMaxSize = (DWORD) min(ALIGN_UP(g_MiniMetaDataBuffMaxSize, GetOsPageSize()), 1024 * 1024);
+        g_MiniMetaDataBuffMaxSize = (DWORD) min(ALIGN_UP(g_MiniMetaDataBuffMaxSize, GetOsPageSize()), (DWORD)(1024 * 1024));
         // allocate the buffer. this is never touched while the process is running, so it doesn't
         // contribute to the process' working set. it is needed only as a "shadow" for a mini-metadata
         // buffer that will be set up and reported / updated in the Watson process (the
@@ -946,7 +968,6 @@ void EEStartupHelper()
         g_MiniMetaDataBuffAddress = (TADDR) ClrVirtualAlloc(NULL,
                                                 g_MiniMetaDataBuffMaxSize, MEM_COMMIT, PAGE_READWRITE);
 #endif // FEATURE_MINIMETADATA_IN_TRIAGEDUMPS
-
 
         g_fEEStarted = TRUE;
         g_EEStartupStatus = S_OK;
@@ -968,9 +989,6 @@ void EEStartupHelper()
         {
             SystemDomain::SystemModule()->ExpandAll();
         }
-
-        // Perform CoreLib consistency check if requested
-        g_CoreLib.CheckExtended();
 #endif // _DEBUG
 
 
@@ -978,6 +996,7 @@ ErrExit: ;
     }
     EX_CATCH
     {
+        hr = GET_EXCEPTION()->GetHR();
     }
     EX_END_CATCH(RethrowTerminalExceptionsWithInitCheck)
 
@@ -1154,11 +1173,6 @@ void STDMETHODCALLTYPE EEShutDownHelper(BOOL fIsDllUnloading)
     Thread * pThisThread = GetThreadNULLOk();
 #endif
 
-    // If the process is detaching then set the global state.
-    // This is used to get around FreeLibrary problems.
-    if(fIsDllUnloading)
-        g_fProcessDetach = true;
-
     if (IsDbgHelperSpecialThread())
     {
         // Our debugger helper thread does not allow Thread object to be set up.
@@ -1182,7 +1196,7 @@ void STDMETHODCALLTYPE EEShutDownHelper(BOOL fIsDllUnloading)
     // ungracefully. This check is an attempt to recognize that case
     // and avoid the impending hang when attempting to get the helper
     // thread to do things for us.
-    if ((g_pDebugInterface != NULL) && g_fProcessDetach)
+    if ((g_pDebugInterface != NULL) && IsAtProcessExit())
         g_pDebugInterface->EarlyHelperThreadDeath();
 #endif // DEBUGGING_SUPPORTED
 
@@ -1199,7 +1213,7 @@ void STDMETHODCALLTYPE EEShutDownHelper(BOOL fIsDllUnloading)
         // Indicate the EE is the shut down phase.
         g_fEEShutDown |= ShutDown_Start;
 
-        if (!g_fProcessDetach && !g_fFastExitProcess)
+        if (!IsAtProcessExit() && !g_fFastExitProcess)
         {
             g_fEEShutDown |= ShutDown_Finalize1;
 
@@ -1209,7 +1223,7 @@ void STDMETHODCALLTYPE EEShutDownHelper(BOOL fIsDllUnloading)
         }
 
         // Ok.  Let's stop the EE.
-        if (!g_fProcessDetach)
+        if (!IsAtProcessExit())
         {
             // Convert key locks into "shutdown" mode. A lock in shutdown mode means:
             // - Only the finalizer/helper/shutdown threads will be able to take the lock.
@@ -1243,15 +1257,12 @@ void STDMETHODCALLTYPE EEShutDownHelper(BOOL fIsDllUnloading)
 
 #ifdef FEATURE_PERFMAP
         // Flush and close the perf map file.
-        PerfMap::Destroy();
+        PerfMap::Disable();
 #endif
 
         ceeInf.JitProcessShutdownWork();  // Do anything JIT-related that needs to happen at shutdown.
 
-#ifdef FEATURE_INTERPRETER
-        // This will check a flag and do nothing if not enabled.
-        Interpreter::PrintPostMortemData();
-#endif // FEATURE_INTERPRETER
+        VirtualCallStubManager::LogFinalStats();
 
 #ifdef PROFILING_SUPPORTED
         // If profiling is enabled, then notify of shutdown first so that the
@@ -1309,7 +1320,7 @@ part2:
         // are already in use, then skip phase 2. This will happen only when those locks
         // are orphaned. In Vista, the penalty for attempting to enter such locks is
         // instant process termination.
-        if (g_fProcessDetach)
+        if (IsAtProcessExit())
         {
             // The assert below is a bit too aggressive and has generally brought cases that have been race conditions
             // and not easily reproed to validate a bug. A typical race scenario is when there are two threads,
@@ -1337,12 +1348,6 @@ part2:
             {
                 g_fEEShutDown |= ShutDown_Phase2;
 
-                // Shutdown finalizer before we suspend all background threads. Otherwise we
-                // never get to finalize anything.
-
-                // No longer process exceptions
-                g_fNoExceptions = true;
-
                 // <TODO>@TODO: This does things which shouldn't occur in part 2.  Namely,
                 // calling managed dll main callbacks (AppDomain::SignalProcessDetach), and
                 // RemoveAppDomainFromIPC.
@@ -1358,34 +1363,6 @@ part2:
                 // Terminate the debugging services.
                 TerminateDebugger();
 #endif // DEBUGGING_SUPPORTED
-
-                StubManager::TerminateStubManagers();
-
-#ifdef FEATURE_INTERPRETER
-                Interpreter::Terminate();
-#endif // FEATURE_INTERPRETER
-
-                //@TODO: find the right place for this
-                VirtualCallStubManager::UninitStatic();
-
-                // Unregister our vectored exception and continue handlers from the OS.
-                // This will ensure that if any other DLL unload (after ours) has an exception,
-                // we wont attempt to process that exception (which could lead to various
-                // issues including AV in the runtime).
-                //
-                // This should be done:
-                //
-                // 1) As the last action during the shutdown so that any unexpected AVs
-                //    in the runtime during shutdown do result in FailFast in VEH.
-                //
-                // 2) Only when the runtime is processing DLL_PROCESS_DETACH.
-                CLRRemoveVectoredHandlers();
-
-#if USE_DISASSEMBLER
-                Disassembler::StaticClose();
-#endif // USE_DISASSEMBLER
-
-                WriteJitHelperCountToSTRESSLOG();
 
                 STRESS_LOG0(LF_STARTUP, LL_INFO10, "EEShutdown shutting down logging");
 
@@ -1409,7 +1386,7 @@ part2:
     EX_END_CATCH(SwallowAllExceptions);
 
     ClrFlsClearThreadType(ThreadType_Shutdown);
-    if (!g_fProcessDetach)
+    if (!IsAtProcessExit())
     {
         g_pEEShutDownEvent->Set();
     }
@@ -1429,7 +1406,7 @@ BOOL IsThreadInSTA()
     CONTRACTL_END;
 
     // If ole32.dll is not loaded
-    if (WszGetModuleHandle(W("ole32.dll")) == NULL)
+    if (GetModuleHandle(W("ole32.dll")) == NULL)
     {
         return FALSE;
     }
@@ -1504,17 +1481,6 @@ BOOL IsThreadInSTA()
 //
 // Actual shut down logic is factored out to EEShutDownHelper which may be called
 // directly by EEShutDown, or indirectly on another thread (see code:#STAShutDown).
-//
-// In order that callees may also know the value of fIsDllUnloading, EEShutDownHelper
-// sets g_fProcessDetach = fIsDllUnloading, and g_fProcessDetach may then be retrieved
-// via code:IsAtProcessExit.
-//
-// NOTE 1: Actually, g_fProcessDetach is set to TRUE if fIsDllUnloading is TRUE. But
-// g_fProcessDetach doesn't appear to be explicitly set to FALSE. (Apparently
-// g_fProcessDetach is implicitly initialized to FALSE as clr.dll is loaded.)
-//
-// NOTE 2: EEDllMain(DLL_PROCESS_DETACH) already sets g_fProcessDetach to TRUE, so it
-// appears EEShutDownHelper doesn't have to.
 //
 void STDMETHODCALLTYPE EEShutDown(BOOL fIsDllUnloading)
 {
@@ -1628,8 +1594,10 @@ void InitializeGarbageCollector()
     g_pFreeObjectMethodTable->SetComponentSize(1);
 
     hr = GCHeapUtilities::LoadAndInitialize();
+
     if (hr != S_OK)
     {
+        LogErrorToHost("GC initialization failed with error 0x%08X", hr);
         ThrowHR(hr);
     }
 
@@ -1706,10 +1674,6 @@ BOOL STDMETHODCALLTYPE EEDllMain( // TRUE on success, FALSE on error.
                     LOG((LF_STARTUP, INFO3, "EEShutDown invoked from EEDllMain"));
                     EEShutDown(TRUE); // shut down EE if it was started up
                 }
-                else
-                {
-                    CLRRemoveVectoredHandlers();
-                }
                 break;
             }
         }
@@ -1758,7 +1722,13 @@ struct TlsDestructionMonitor
                     thread->m_pFrame = FRAME_TOP;
                     GCX_COOP_NO_DTOR_END();
                 }
+
                 thread->DetachThread(TRUE);
+            }
+            else
+            {
+                // Since we don't actually cleanup the TLS data along this path, verify that it is already cleaned up
+                AssertThreadStaticDataFreed();
             }
 
             ThreadDetaching();
@@ -1777,7 +1747,7 @@ void EnsureTlsDestructionMonitor()
 
 #ifdef DEBUGGING_SUPPORTED
 //
-// InitializeDebugger initialized the Runtime-side COM+ Debugging Services
+// InitializeDebugger initialized the Runtime-side CLR Debugging Services
 //
 static void InitializeDebugger(void)
 {
@@ -1860,7 +1830,7 @@ static void InitializeDebugger(void)
 
 
 //
-// TerminateDebugger shuts down the Runtime-side COM+ Debugging Services
+// TerminateDebugger shuts down the Runtime-side CLR Debugging Services
 // InitializeDebugger will call this if it fails.
 // This may be called even if the debugger is partially initialized.
 // This can be called multiple times.
@@ -1993,12 +1963,10 @@ static HRESULT GetThreadUICultureNames(__inout StringArrayList* pCultureNames)
             sParentCulture = sCulture;
 #endif // !TARGET_UNIX
         }
-        // (LPCWSTR) to restrict the size to null terminated size
-        pCultureNames->AppendIfNotThere((LPCWSTR)sCulture);
-        // Disabling for Dev10 for consistency with managed resource lookup (see AppCompat bug notes in ResourceFallbackManager.cs)
-        // Also, this is in the wrong order - put after the parent culture chain.
-        //AddThreadPreferredUILanguages(pCultureNames);
-        pCultureNames->AppendIfNotThere((LPCWSTR)sParentCulture);
+        sCulture.Normalize();
+        sParentCulture.Normalize();
+        pCultureNames->AppendIfNotThere(sCulture);
+        pCultureNames->AppendIfNotThere(sParentCulture);
         pCultureNames->Append(SString::Empty());
     }
     EX_CATCH

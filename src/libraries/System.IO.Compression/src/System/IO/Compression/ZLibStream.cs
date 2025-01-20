@@ -45,6 +45,18 @@ namespace System.IO.Compression
             _deflateStream = new DeflateStream(stream, compressionLevel, leaveOpen, ZLibNative.ZLib_DefaultWindowBits);
         }
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ZLibStream"/> class by using the specified stream, compression options, and optionally leaves the stream open.
+        /// </summary>
+        /// <param name="stream">The stream to which compressed data is written.</param>
+        /// <param name="compressionOptions">The ZLib options for fine tuning the compression stream.</param>
+        /// <param name="leaveOpen"><see langword="true" /> to leave the stream object open after disposing the <see cref="ZLibStream"/> object; otherwise, <see langword="false" />.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="stream"/> or <paramref name="compressionOptions"/> is <see langword="null" />.</exception>
+        public ZLibStream(Stream stream, ZLibCompressionOptions compressionOptions, bool leaveOpen = false)
+        {
+            _deflateStream = new DeflateStream(stream, compressionOptions, leaveOpen, ZLibNative.ZLib_DefaultWindowBits);
+        }
+
         /// <summary>Gets a value indicating whether the stream supports reading.</summary>
         public override bool CanRead => _deflateStream?.CanRead ?? false;
 
@@ -279,15 +291,7 @@ namespace System.IO.Compression
         /// <summary>Throws an <see cref="ObjectDisposedException"/> if the stream is closed.</summary>
         private void ThrowIfClosed()
         {
-            if (_deflateStream is null)
-            {
-                ThrowClosedException();
-            }
+            ObjectDisposedException.ThrowIf(_deflateStream is null, this);
         }
-
-        /// <summary>Throws an <see cref="ObjectDisposedException"/>.</summary>
-        [DoesNotReturn]
-        private static void ThrowClosedException() =>
-            throw new ObjectDisposedException(nameof(ZLibStream), SR.ObjectDisposed_StreamClosed);
     }
 }

@@ -8,9 +8,7 @@ using System.Threading;
 namespace System.Diagnostics.Tracing
 {
 #if !ES_BUILD_STANDALONE
-#if !FEATURE_WASM_PERFTRACING
-    [System.Runtime.Versioning.UnsupportedOSPlatform("browser")]
-#endif
+    [UnsupportedOSPlatform("browser")]
 #endif
     internal sealed class CounterGroup
     {
@@ -46,24 +44,56 @@ namespace System.Diagnostics.Tracing
 
         private void OnEventSourceCommand(object? sender, EventCommandEventArgs e)
         {
-            if (e.Command == EventCommand.Enable || e.Command == EventCommand.Update)
-            {
-                Debug.Assert(e.Arguments != null);
+            // Should only be enable or disable
+            Debug.Assert(e.Command == EventCommand.Enable || e.Command == EventCommand.Disable);
 
-                if (e.Arguments.TryGetValue("EventCounterIntervalSec", out string? valueStr) && float.TryParse(valueStr, out float value))
+            lock (s_counterGroupLock)      // Lock the CounterGroup
+            {
+                if (e.Command == EventCommand.Enable)
                 {
-                    lock (s_counterGroupLock)      // Lock the CounterGroup
+                    Debug.Assert(e.Arguments != null);
+
+                    if (!e.Arguments.TryGetValue("EventCounterIntervalSec", out string? valueStr)
+                        || !float.TryParse(valueStr, out float intervalValue))
                     {
-                        EnableTimer(value);
+                        // Command is Enable but no EventCounterIntervalSec arg so ignore
+                        return;
+                    }
+
+                    // Sending an Enabled with EventCounterIntervalSec <=0 is a signal that we should immediately turn
+                    // off counters
+                    if (intervalValue <= 0)
+                    {
+                        DisableTimer();
+                    }
+                    else
+                    {
+                        EnableTimer(intervalValue);
                     }
                 }
-            }
-            else if (e.Command == EventCommand.Disable)
-            {
-                lock (s_counterGroupLock)
+                else
                 {
-                    DisableTimer();
+                    Debug.Assert(e.Command == EventCommand.Disable);
+                    // Since we allow sessions to send multiple Enable commands to update the interval, we cannot
+                    // rely on ref counting to determine when to enable and disable counters. You will get an arbitrary
+                    // number of Enables and one Disable per session.
+                    //
+                    // Previously we would turn off counters when we received any Disable command, but that meant that any
+                    // session could turn off counters for all other sessions. To get to a good place we now will only
+                    // turn off counters once the EventSource that provides the counters is disabled. We can then end up
+                    // keeping counters on too long in certain circumstances - if one session enables counters, then a second
+                    // session enables the EventSource but not counters we will stay on until both sessions terminate, even
+                    // if the first session terminates first.
+                    if (!_eventSource.IsEnabled())
+                    {
+                        DisableTimer();
+                    }
                 }
+
+                Debug.Assert((s_counterGroupEnabledList == null && !_eventSource.IsEnabled())
+                                || (_eventSource.IsEnabled() && s_counterGroupEnabledList!.Contains(this))
+                                || (_pollingIntervalInMilliseconds == 0 && !s_counterGroupEnabledList!.Contains(this))
+                                || (!_eventSource.IsEnabled() && !s_counterGroupEnabledList!.Contains(this)));
             }
         }
 
@@ -79,15 +109,15 @@ namespace System.Diagnostics.Tracing
         private static void EnsureEventSourceIndexAvailable(int eventSourceIndex)
         {
             Debug.Assert(Monitor.IsEntered(s_counterGroupLock));
-            if (CounterGroup.s_counterGroups == null)
+            if (s_counterGroups == null)
             {
-                CounterGroup.s_counterGroups = new WeakReference<CounterGroup>[eventSourceIndex + 1];
+                s_counterGroups = new WeakReference<CounterGroup>[eventSourceIndex + 1];
             }
-            else if (eventSourceIndex >= CounterGroup.s_counterGroups.Length)
+            else if (eventSourceIndex >= s_counterGroups.Length)
             {
                 WeakReference<CounterGroup>[] newCounterGroups = new WeakReference<CounterGroup>[eventSourceIndex + 1];
-                Array.Copy(CounterGroup.s_counterGroups, newCounterGroups, CounterGroup.s_counterGroups.Length);
-                CounterGroup.s_counterGroups = newCounterGroups;
+                Array.Copy(s_counterGroups, newCounterGroups, s_counterGroups.Length);
+                s_counterGroups = newCounterGroups;
             }
         }
 
@@ -98,11 +128,11 @@ namespace System.Diagnostics.Tracing
                 int eventSourceIndex = EventListener.EventSourceIndex(eventSource);
                 EnsureEventSourceIndexAvailable(eventSourceIndex);
                 Debug.Assert(s_counterGroups != null);
-                WeakReference<CounterGroup> weakRef = CounterGroup.s_counterGroups[eventSourceIndex];
+                WeakReference<CounterGroup> weakRef = s_counterGroups[eventSourceIndex];
                 if (weakRef == null || !weakRef.TryGetTarget(out CounterGroup? ret))
                 {
                     ret = new CounterGroup(eventSource);
-                    CounterGroup.s_counterGroups[eventSourceIndex] = new WeakReference<CounterGroup>(ret);
+                    s_counterGroups[eventSourceIndex] = new WeakReference<CounterGroup>(ret);
                 }
                 return ret;
             }
@@ -118,15 +148,13 @@ namespace System.Diagnostics.Tracing
 
         private void EnableTimer(float pollingIntervalInSeconds)
         {
+            Debug.Assert(pollingIntervalInSeconds > 0);
             Debug.Assert(Monitor.IsEntered(s_counterGroupLock));
-            if (pollingIntervalInSeconds <= 0)
-            {
-                DisableTimer();
-            }
-            else if (_pollingIntervalInMilliseconds == 0 || pollingIntervalInSeconds * 1000 < _pollingIntervalInMilliseconds)
+            if (_pollingIntervalInMilliseconds == 0 || pollingIntervalInSeconds * 1000 < _pollingIntervalInMilliseconds)
             {
                 _pollingIntervalInMilliseconds = (int)(pollingIntervalInSeconds * 1000);
-                ResetCounters(); // Reset statistics for counters before we start the thread.
+                // Schedule IncrementingPollingCounter reset and synchronously reset other counters
+                HandleCountersReset();
 
                 _timeStampSinceCollectionStarted = DateTime.UtcNow;
                 _nextPollingTimeStamp = DateTime.UtcNow + new TimeSpan(0, 0, (int)pollingIntervalInSeconds);
@@ -141,7 +169,7 @@ namespace System.Diagnostics.Tracing
                         IsBackground = true,
                         Name = ".NET Counter Poller"
                     };
-                    s_pollingThread.InternalUnsafeStart();
+                    s_pollingThread.Start();
                 }
 
                 if (!s_counterGroupEnabledList!.Contains(this))
@@ -160,26 +188,35 @@ namespace System.Diagnostics.Tracing
             Debug.Assert(Monitor.IsEntered(s_counterGroupLock));
             _pollingIntervalInMilliseconds = 0;
             s_counterGroupEnabledList?.Remove(this);
+
+            if (s_needsResetIncrementingPollingCounters.Count > 0)
+            {
+                foreach (DiagnosticCounter diagnosticCounter in _counters)
+                {
+                    if (diagnosticCounter is IncrementingPollingCounter pollingCounter)
+                        s_needsResetIncrementingPollingCounters.Remove(pollingCounter);
+                }
+            }
         }
 
-        private void ResetCounters()
+        private void HandleCountersReset()
         {
-            lock (s_counterGroupLock) // Lock the CounterGroup
+            Debug.Assert(Monitor.IsEntered(s_counterGroupLock));
+            foreach (DiagnosticCounter counter in _counters)
             {
-                foreach (DiagnosticCounter counter in _counters)
+                if (counter is IncrementingEventCounter ieCounter)
                 {
-                    if (counter is IncrementingEventCounter ieCounter)
-                    {
-                        ieCounter.UpdateMetric();
-                    }
-                    else if (counter is IncrementingPollingCounter ipCounter)
-                    {
-                        ipCounter.UpdateMetric();
-                    }
-                    else if (counter is EventCounter eCounter)
-                    {
-                        eCounter.ResetStatistics();
-                    }
+                    ieCounter.UpdateMetric();
+                }
+                else if (counter is IncrementingPollingCounter ipCounter)
+                {
+                    // IncrementingPollingCounters will be reset on timer thread
+                    // We need this to avoid deadlocks caused by running IncrementingPollingCounter._totalValueProvider under EventListener.EventListenersLock
+                    s_needsResetIncrementingPollingCounters.Add(ipCounter);
+                }
+                else if (counter is EventCounter eCounter)
+                {
+                    eCounter.ResetStatistics();
                 }
             }
         }
@@ -235,6 +272,7 @@ namespace System.Diagnostics.Tracing
         private static AutoResetEvent? s_pollingThreadSleepEvent;
 
         private static List<CounterGroup>? s_counterGroupEnabledList;
+        private static List<IncrementingPollingCounter> s_needsResetIncrementingPollingCounters = [];
 
         private static void PollForValues()
         {
@@ -245,6 +283,7 @@ namespace System.Diagnostics.Tracing
             // calling into the callbacks can cause a re-entrancy into CounterGroup.Enable()
             // and result in a deadlock. (See https://github.com/dotnet/runtime/issues/40190 for details)
             var onTimers = new List<CounterGroup>();
+            List<IncrementingPollingCounter>? countersToReset = null;
             while (true)
             {
                 int sleepDurationInMilliseconds = int.MaxValue;
@@ -263,7 +302,24 @@ namespace System.Diagnostics.Tracing
                         millisecondsTillNextPoll = Math.Max(1, millisecondsTillNextPoll);
                         sleepDurationInMilliseconds = Math.Min(sleepDurationInMilliseconds, millisecondsTillNextPoll);
                     }
+
+                    if (s_needsResetIncrementingPollingCounters.Count > 0)
+                    {
+                        countersToReset = s_needsResetIncrementingPollingCounters;
+                        s_needsResetIncrementingPollingCounters = [];
+                    }
                 }
+
+                if (countersToReset != null)
+                {
+                    foreach (IncrementingPollingCounter counter in countersToReset)
+                    {
+                        counter.UpdateMetric();
+                    }
+
+                    countersToReset = null;
+                }
+
                 foreach (CounterGroup onTimer in onTimers)
                 {
                     onTimer.OnTimer();

@@ -9,11 +9,6 @@ struct T_RUNTIME_FUNCTION {
     uint32_t EndAddress;
     uint32_t UnwindInfoAddress;
 };
-#elif defined(TARGET_ARM)
-struct T_RUNTIME_FUNCTION {
-    uint32_t BeginAddress;
-    uint32_t UnwindData;
-};
 #elif defined(TARGET_ARM64)
 struct T_RUNTIME_FUNCTION {
     uint32_t BeginAddress;
@@ -70,7 +65,12 @@ public:
     PTR_VOID GetFramePointer(MethodInfo *   pMethodInfo,
                              REGDISPLAY *   pRegisterSet);
 
-    uint32_t GetCodeOffset(MethodInfo * pMethodInfo, PTR_VOID address, /*out*/ PTR_UInt8* gcInfo);
+#ifdef TARGET_X86
+    uintptr_t GetResumeSp(MethodInfo *   pMethodInfo,
+                          REGDISPLAY *   pRegisterSet);
+#endif
+
+    uint32_t GetCodeOffset(MethodInfo * pMethodInfo, PTR_VOID address, /*out*/ PTR_uint8_t* gcInfo);
 
     bool IsSafePoint(PTR_VOID pvAddress);
 
@@ -81,6 +81,7 @@ public:
                     bool            isActiveStackFrame);
 
     bool UnwindStackFrame(MethodInfo *    pMethodInfo,
+                          uint32_t        flags,
                           REGDISPLAY *    pRegisterSet,                 // in/out
                           PInvokeTransitionFrame**      ppPreviousTransitionFrame);   // out
 
@@ -90,9 +91,13 @@ public:
     bool IsUnwindable(PTR_VOID pvAddress);
 
     bool GetReturnAddressHijackInfo(MethodInfo *    pMethodInfo,
-                                    REGDISPLAY *    pRegisterSet,       // in
-                                    PTR_PTR_VOID *  ppvRetAddrLocation, // out
-                                    GCRefKind *     pRetValueKind);     // out
+                                    REGDISPLAY *    pRegisterSet,        // in
+                                    PTR_PTR_VOID *  ppvRetAddrLocation); // out
+
+#ifdef TARGET_X86
+    GCRefKind GetReturnValueKind(MethodInfo *   pMethodInfo,
+                                    REGDISPLAY *   pRegisterSet);
+#endif
 
     PTR_VOID RemapHardwareFaultToGCSafePoint(MethodInfo * pMethodInfo, PTR_VOID controlPC);
 

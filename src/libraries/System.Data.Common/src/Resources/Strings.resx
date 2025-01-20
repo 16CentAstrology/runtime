@@ -500,7 +500,6 @@
   <data name="SqlMisc_NotFilledMessage" xml:space="preserve"><value>SQL Type has not been loaded with data.</value></data>
   <data name="SqlMisc_AlreadyFilledMessage" xml:space="preserve"><value>SQL Type has already been loaded with data.</value></data>
   <data name="SqlMisc_ClosedXmlReaderMessage" xml:space="preserve"><value>Invalid attempt to access a closed XmlReader.</value></data>
-  <data name="SqlMisc_InvalidOpStreamClosed" xml:space="preserve"><value>Invalid attempt to call {0} when the stream is closed.</value></data>
   <data name="SqlMisc_InvalidOpStreamNonWritable" xml:space="preserve"><value>Invalid attempt to call {0} when the stream non-writable.</value></data>
   <data name="SqlMisc_InvalidOpStreamNonReadable" xml:space="preserve"><value>Invalid attempt to call {0} when the stream non-readable.</value></data>
   <data name="SqlMisc_InvalidOpStreamNonSeekable" xml:space="preserve"><value>Invalid attempt to call {0} when the stream is non-seekable.</value></data>
@@ -528,4 +527,5 @@
   <data name="DataSetLinq_CannotCompareDeletedRow" xml:space="preserve"><value>The DataRowComparer does not work with DataRows that have been deleted since it only compares current values.</value></data>
   <data name="DataSetLinq_CannotLoadDeletedRow" xml:space="preserve"><value>The source contains a deleted DataRow that cannot be copied to the DataTable.</value></data>
   <data name="DataSetLinq_NonNullableCast" xml:space="preserve"><value>Cannot cast DBNull. Value to type '{0}'. Please use a nullable type.</value></data>
+  <data name="DataSet_XmlSerializationUnsupported" xml:space="preserve"><value>DataSet implementation of IXmlSerializable is not trim compatible and has been disabled in the app configuration.</value></data>
 </root>

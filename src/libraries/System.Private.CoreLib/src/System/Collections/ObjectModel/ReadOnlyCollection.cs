@@ -3,13 +3,15 @@
 
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 
 namespace System.Collections.ObjectModel
 {
     [Serializable]
+    [CollectionBuilder(typeof(ReadOnlyCollection), "CreateCollection")]
     [DebuggerTypeProxy(typeof(ICollectionDebugView<>))]
     [DebuggerDisplay("Count = {Count}")]
-    [System.Runtime.CompilerServices.TypeForwardedFrom("mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089")]
+    [TypeForwardedFrom("mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089")]
     public class ReadOnlyCollection<T> : IList<T>, IList, IReadOnlyList<T>
     {
         private readonly IList<T> list; // Do not rename (binary serialization)
@@ -43,9 +45,8 @@ namespace System.Collections.ObjectModel
         }
 
         public IEnumerator<T> GetEnumerator() =>
-            list.Count == 0 ?
-                SZGenericArrayEnumerator<T>.Empty :
-                list.GetEnumerator();
+            list.Count == 0 ? SZGenericArrayEnumerator<T>.Empty :
+            list.GetEnumerator();
 
         public int IndexOf(T value)
         {
@@ -140,7 +141,7 @@ namespace System.Collections.ObjectModel
                 Type sourceType = typeof(T);
                 if (!(targetType.IsAssignableFrom(sourceType) || sourceType.IsAssignableFrom(targetType)))
                 {
-                    ThrowHelper.ThrowArgumentException_Argument_InvalidArrayType();
+                    ThrowHelper.ThrowArgumentException_Argument_IncompatibleArrayType();
                 }
 
                 //
@@ -150,7 +151,7 @@ namespace System.Collections.ObjectModel
                 object?[]? objects = array as object[];
                 if (objects == null)
                 {
-                    ThrowHelper.ThrowArgumentException_Argument_InvalidArrayType();
+                    ThrowHelper.ThrowArgumentException_Argument_IncompatibleArrayType();
                 }
 
                 int count = list.Count;
@@ -163,7 +164,7 @@ namespace System.Collections.ObjectModel
                 }
                 catch (ArrayTypeMismatchException)
                 {
-                    ThrowHelper.ThrowArgumentException_Argument_InvalidArrayType();
+                    ThrowHelper.ThrowArgumentException_Argument_IncompatibleArrayType();
                 }
             }
         }
@@ -227,6 +228,47 @@ namespace System.Collections.ObjectModel
         void IList.RemoveAt(int index)
         {
             ThrowHelper.ThrowNotSupportedException(ExceptionResource.NotSupported_ReadOnlyCollection);
+        }
+    }
+
+    /// <summary>
+    /// Provides static methods for read-only collections.
+    /// </summary>
+    public static class ReadOnlyCollection
+    {
+        /// <summary>
+        /// Creates a new <see cref="ReadOnlyCollection{T}"/> from the specified span of values.
+        /// This method (simplifies collection initialization)[/dotnet/csharp/language-reference/operators/collection-expressions]
+        /// to create a new <see cref="ReadOnlyCollection{T}"/> with the specified values.
+        /// </summary>
+        /// <typeparam name="T">The type of elements in the collection.</typeparam>
+        /// <param name="values">The span of values to include in the collection.</param>
+        /// <returns>A new <see cref="ReadOnlyCollection{T}"/> containing the specified values.</returns>
+        public static ReadOnlyCollection<T> CreateCollection<T>(params ReadOnlySpan<T> values) =>
+            values.IsEmpty ? ReadOnlyCollection<T>.Empty : new ReadOnlyCollection<T>(values.ToArray());
+
+        /// <summary>
+        /// Creates a new <see cref="ReadOnlySet{T}"/> from the specified span of values.
+        /// This method (simplifies collection initialization)[/dotnet/csharp/language-reference/operators/collection-expressions]
+        /// to create a new <see cref="ReadOnlySet{T}"/> with the specified values.
+        /// </summary>
+        /// <typeparam name="T">The type of elements in the collection.</typeparam>
+        /// <param name="values">The span of values to include in the collection.</param>
+        /// <returns>A new <see cref="ReadOnlySet{T}"/> containing the specified values.</returns>
+        public static ReadOnlySet<T> CreateSet<T>(params ReadOnlySpan<T> values)
+        {
+            if (values.IsEmpty)
+            {
+                return ReadOnlySet<T>.Empty;
+            }
+
+            HashSet<T> hashSet = [];
+            foreach (T value in values)
+            {
+                hashSet.Add(value);
+            }
+
+            return new ReadOnlySet<T>(hashSet);
         }
     }
 }

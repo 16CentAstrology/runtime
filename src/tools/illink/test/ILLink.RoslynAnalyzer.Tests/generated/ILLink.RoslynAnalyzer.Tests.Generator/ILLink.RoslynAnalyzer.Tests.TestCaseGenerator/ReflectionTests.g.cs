@@ -38,7 +38,7 @@ namespace ILLink.RoslynAnalyzer.Tests
 		}
 
 		[Fact]
-		public Task ObjectGetTypeLibraryMode ()
+		public Task IsAssignableFrom ()
 		{
 			return RunTest (allowMissingWarnings: true);
 		}
@@ -50,19 +50,13 @@ namespace ILLink.RoslynAnalyzer.Tests
 		}
 
 		[Fact]
-		public Task RunClassConstructorUsedViaReflection ()
-		{
-			return RunTest (allowMissingWarnings: true);
-		}
-
-		[Fact]
-		public Task TypeHierarchyLibraryModeSuppressions ()
-		{
-			return RunTest (allowMissingWarnings: true);
-		}
-
-		[Fact]
 		public Task UnderlyingSystemType ()
+		{
+			return RunTest (allowMissingWarnings: true);
+		}
+
+		[Fact]
+		public Task UnsafeAccessor ()
 		{
 			return RunTest (allowMissingWarnings: true);
 		}

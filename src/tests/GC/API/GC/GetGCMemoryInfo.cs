@@ -5,6 +5,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
+using Xunit;
 
 public class Test_GetGCMemoryInfo
 {
@@ -90,10 +91,15 @@ public class Test_GetGCMemoryInfo
         return listByteArray;
     }
 
-    public static int Main()
+    [Fact]
+    public static int TestEntryPoint()
     {
         // We will keep executing the test in case of a failure to see if we have multiple failures.
         bool isTestSucceeded = true;
+
+        // Before any GCs happen, this should not assert
+        GCMemoryInfo memoryInfoNoGC = GC.GetGCMemoryInfo(GCKind.Background);
+        Console.WriteLine("BGC index is {0}", memoryInfoNoGC.Index);
 
         try
         {

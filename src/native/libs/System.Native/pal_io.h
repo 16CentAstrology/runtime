@@ -151,11 +151,12 @@ enum
 
     // Flags (combinable)
     // These numeric values are not defined by POSIX and vary across targets.
-    PAL_O_CLOEXEC = 0x0010, // Close-on-exec
-    PAL_O_CREAT = 0x0020,   // Create file if it doesn't already exist
-    PAL_O_EXCL = 0x0040,    // When combined with CREAT, fails if file already exists
-    PAL_O_TRUNC = 0x0080,   // Truncate file to length 0 if it already exists
-    PAL_O_SYNC = 0x0100,    // Block writes call will block until physically written
+    PAL_O_CLOEXEC = 0x0010,  // Close-on-exec
+    PAL_O_CREAT = 0x0020,    // Create file if it doesn't already exist
+    PAL_O_EXCL = 0x0040,     // When combined with CREAT, fails if file already exists
+    PAL_O_TRUNC = 0x0080,    // Truncate file to length 0 if it already exists
+    PAL_O_SYNC = 0x0100,     // Block writes call will block until physically written
+    PAL_O_NOFOLLOW = 0x0200, // Fails to open the target if it's a symlink, parent symlinks are allowed
 };
 
 /**
@@ -367,6 +368,20 @@ PALEXPORT intptr_t SystemNative_Dup(intptr_t oldfd);
  * Returns 0 for success, -1 for failure. Sets errno on failure.
  */
 PALEXPORT int32_t SystemNative_Unlink(const char* path);
+
+/**
+ * Check if the system supports memfd_create(2). 
+ * 
+ * Returns 1 if memfd_create is supported, 0 if not supported, or -1 on failure. Sets errno on failure.
+ */
+PALEXPORT int32_t SystemNative_IsMemfdSupported(void);
+
+/**
+ * Create an anonymous file descriptor. Implemented as shim to memfd_create(2).
+ *
+ * Returns file descriptor or -1 on failure. Sets errno on failure.
+ */
+PALEXPORT intptr_t SystemNative_MemfdCreate(const char* name, int32_t isReadonly);
 
 /**
  * Open or create a shared memory object. Implemented as shim to shm_open(3).
@@ -598,6 +613,13 @@ PALEXPORT void* SystemNative_MMap(void* address,
  * Returns 0 for success, -1 for failure. Sets errno on failure.
  */
 PALEXPORT int32_t SystemNative_MUnmap(void* address, uint64_t length);
+
+/**
+ * Change the access protections for the specified memory pages.
+ *
+ * Returns 0 for success, -1 for failure. Sets errno on failure.
+ */
+PALEXPORT int32_t SystemNative_MProtect(void* address, uint64_t length, int32_t protection);
 
 /**
  * Give advice about use of memory. Implemented as shim to madvise(2).

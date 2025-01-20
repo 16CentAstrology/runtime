@@ -21,10 +21,8 @@ namespace System.Security.Cryptography
             // also receive a bad count from HashAlgorithm reading from a Stream that returns
             // an invalid number of bytes read.  Since our implementations of AppendHashDataCore
             // end up using unsafe code, we want to be sure the arguments are valid.
-            if (offset < 0)
-                throw new ArgumentOutOfRangeException(nameof(offset), SR.ArgumentOutOfRange_NeedNonNegNum);
-            if (count < 0)
-                throw new ArgumentOutOfRangeException(nameof(count), SR.ArgumentOutOfRange_NeedNonNegNum);
+            ArgumentOutOfRangeException.ThrowIfNegative(offset);
+            ArgumentOutOfRangeException.ThrowIfNegative(count);
             if (data.Length - offset < count)
                 throw new ArgumentException(SR.Argument_InvalidOffLen);
 
@@ -32,6 +30,7 @@ namespace System.Security.Cryptography
         }
 
         public abstract void AppendHashData(ReadOnlySpan<byte> data);
+        public abstract HashProvider Clone();
 
         // Compute the hash based on the appended data and resets the HashProvider for more hashing.
         public abstract int FinalizeHashAndReset(Span<byte> destination);

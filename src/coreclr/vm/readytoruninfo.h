@@ -28,7 +28,7 @@ private:
     PTR_PEImageLayout               m_pLayout;
     PTR_READYTORUN_CORE_HEADER      m_pCoreHeader;
     Volatile<bool>                  m_fForbidLoadILBodyFixups;
-    
+
 public:
     ReadyToRunCoreInfo();
     ReadyToRunCoreInfo(PEImageLayout * pLayout, READYTORUN_CORE_HEADER * pCoreHeader);
@@ -47,6 +47,53 @@ public:
 
 typedef DPTR(class ReadyToRunInfo) PTR_ReadyToRunInfo;
 typedef DPTR(class ReadyToRunCoreInfo) PTR_ReadyToRunCoreInfo;
+
+
+class ReadyToRun_EnclosingTypeMap
+{
+private:
+    uint16_t TypeCount = 0;
+    ReadyToRun_EnclosingTypeMap() = default;
+public:
+    ReadyToRun_EnclosingTypeMap& operator=(const ReadyToRun_EnclosingTypeMap& other) = delete;
+    ReadyToRun_EnclosingTypeMap(const ReadyToRun_EnclosingTypeMap& other) = delete;
+    const static ReadyToRun_EnclosingTypeMap EmptyInstance;
+
+    mdTypeDef GetEnclosingType(mdTypeDef input, IMDInternalImport* pImport) const;
+    HRESULT GetEnclosingTypeNoThrow(mdTypeDef input, mdTypeDef *pEnclosingType, IMDInternalImport* pImport) const;
+};
+
+class ReadyToRun_TypeGenericInfoMap
+{
+private:
+    uint32_t TypeCount = 0;
+    ReadyToRunTypeGenericInfo GetTypeGenericInfo(mdTypeDef input, bool *foundResult) const;
+    ReadyToRun_TypeGenericInfoMap() = default;
+public:
+    ReadyToRun_TypeGenericInfoMap& operator=(const ReadyToRun_TypeGenericInfoMap& other) = delete;
+    ReadyToRun_TypeGenericInfoMap(const ReadyToRun_TypeGenericInfoMap& other) = delete;
+
+    const static ReadyToRun_TypeGenericInfoMap EmptyInstance;
+
+    HRESULT IsGenericNoThrow(mdTypeDef input, bool *pIsGeneric, IMDInternalImport* pImport) const;
+    HRESULT GetGenericArgumentCountNoThrow(mdTypeDef input, uint32_t *pCount, IMDInternalImport* pImport) const;
+    bool IsGeneric(mdTypeDef input, IMDInternalImport* pImport) const;
+    uint32_t GetGenericArgumentCount(mdTypeDef input, IMDInternalImport* pImport) const;
+    bool HasVariance(mdTypeDef input, bool *foundResult) const;
+    bool HasConstraints(mdTypeDef input, bool *foundResult) const;
+};
+
+class ReadyToRun_MethodIsGenericMap
+{
+    uint32_t MethodCount = 0;
+    ReadyToRun_MethodIsGenericMap() = default;
+public:
+    ReadyToRun_MethodIsGenericMap& operator=(const ReadyToRun_MethodIsGenericMap& other) = delete;
+    ReadyToRun_MethodIsGenericMap(const ReadyToRun_MethodIsGenericMap& other) = delete;
+
+    const static ReadyToRun_MethodIsGenericMap EmptyInstance;
+    bool IsGeneric(mdMethodDef input, bool *foundResult) const;
+};
 
 class ReadyToRunInfo
 {
@@ -76,7 +123,7 @@ class ReadyToRunInfo
     PTR_READYTORUN_IMPORT_SECTION   m_pImportSections;
     DWORD                           m_nImportSections;
 
-    bool                            m_readyToRunCodeDisabled; // Is 
+    bool                            m_readyToRunCodeDisabled;
 
     NativeFormat::NativeReader      m_nativeReader;
     NativeFormat::NativeArray       m_methodDefEntryPoints;
@@ -283,19 +330,35 @@ public:
     BOOL IsImageVersionAtLeast(int majorVersion, int minorVersion);
 private:
     BOOL GetTypeNameFromToken(IMDInternalImport * pImport, mdToken mdType, LPCUTF8 * ppszName, LPCUTF8 * ppszNameSpace);
-    BOOL GetEnclosingToken(IMDInternalImport * pImport, mdToken mdType, mdToken * pEnclosingToken);
-    BOOL CompareTypeNameOfTokens(mdToken mdToken1, IMDInternalImport * pImport1, mdToken mdToken2, IMDInternalImport * pImport2);
+    BOOL GetEnclosingToken(IMDInternalImport * pImport, ModuleBase *pModule1, mdToken mdType, mdToken * pEnclosingToken);
+    BOOL CompareTypeNameOfTokens(mdToken mdToken1, IMDInternalImport * pImport1, ModuleBase *pModule1, mdToken mdToken2, IMDInternalImport * pImport2, ModuleBase *pModule2);
 
     PTR_MethodDesc GetMethodDescForEntryPointInNativeImage(PCODE entryPoint);
     void SetMethodDescForEntryPointInNativeImage(PCODE entryPoint, PTR_MethodDesc methodDesc);
-    
+
     PTR_ReadyToRunCoreInfo GetComponentInfo() { return dac_cast<PTR_ReadyToRunCoreInfo>(&m_component); }
+
+    friend struct ::cdac_data<ReadyToRunInfo>;
+};
+
+template<>
+struct cdac_data<ReadyToRunInfo>
+{
+    static constexpr size_t CompositeInfo = offsetof(ReadyToRunInfo, m_pCompositeInfo);
+    static constexpr size_t NumRuntimeFunctions = offsetof(ReadyToRunInfo, m_nRuntimeFunctions);
+    static constexpr size_t RuntimeFunctions = offsetof(ReadyToRunInfo, m_pRuntimeFunctions);
+    static constexpr size_t NumHotColdMap = offsetof(ReadyToRunInfo, m_nHotColdMap);
+    static constexpr size_t HotColdMap = offsetof(ReadyToRunInfo, m_pHotColdMap);
+    static constexpr size_t DelayLoadMethodCallThunks = offsetof(ReadyToRunInfo, m_pSectionDelayLoadMethodCallThunks);
+    static constexpr size_t EntryPointToMethodDescMap = offsetof(ReadyToRunInfo, m_entryPointToMethodDescMap);
 };
 
 class DynamicHelpers
 {
 private:
     static void EmitHelperWithArg(BYTE*& pCode, size_t rxOffset, LoaderAllocator * pAllocator, TADDR arg, PCODE target);
+
+    static PCODE GetDictionaryLookupHelper(CorInfoHelpFunc jitHelper);
 public:
     static PCODE CreateHelper(LoaderAllocator * pAllocator, TADDR arg, PCODE target);
     static PCODE CreateHelperWithArg(LoaderAllocator * pAllocator, TADDR arg, PCODE target);

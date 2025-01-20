@@ -50,16 +50,15 @@ namespace System.Text
         {
             ArgumentNullException.ThrowIfNull(bytes);
 
-            if (index < 0 || count < 0)
-                throw new ArgumentOutOfRangeException(index < 0 ? nameof(index) : nameof(count),
-                    SR.ArgumentOutOfRange_NeedNonNegNum);
+            ArgumentOutOfRangeException.ThrowIfNegative(index);
+            ArgumentOutOfRangeException.ThrowIfNegative(count);
 
             if (bytes.Length - index < count)
                 throw new ArgumentOutOfRangeException(nameof(bytes),
                     SR.ArgumentOutOfRange_IndexCountBuffer);
 
             // Just call pointer version
-            fixed (byte* pBytes = &MemoryMarshal.GetReference((Span<byte>)bytes))
+            fixed (byte* pBytes = &MemoryMarshal.GetArrayDataReference(bytes))
                 return GetCharCount(pBytes + index, count, flush);
         }
 
@@ -67,9 +66,7 @@ namespace System.Text
         {
             ArgumentNullException.ThrowIfNull(bytes);
 
-            if (count < 0)
-                throw new ArgumentOutOfRangeException(nameof(count),
-                      SR.ArgumentOutOfRange_NeedNonNegNum);
+            ArgumentOutOfRangeException.ThrowIfNegative(count);
 
             // Remember the flush
             _mustFlush = flush;
@@ -92,9 +89,8 @@ namespace System.Text
             ArgumentNullException.ThrowIfNull(bytes);
             ArgumentNullException.ThrowIfNull(chars);
 
-            if (byteIndex < 0 || byteCount < 0)
-                throw new ArgumentOutOfRangeException(byteIndex < 0 ? nameof(byteIndex) : nameof(byteCount),
-                    SR.ArgumentOutOfRange_NeedNonNegNum);
+            ArgumentOutOfRangeException.ThrowIfNegative(byteIndex);
+            ArgumentOutOfRangeException.ThrowIfNegative(byteCount);
 
             if (bytes.Length - byteIndex < byteCount)
                 throw new ArgumentOutOfRangeException(nameof(bytes),
@@ -107,11 +103,13 @@ namespace System.Text
             int charCount = chars.Length - charIndex;
 
             // Just call pointer version
-            fixed (byte* pBytes = &MemoryMarshal.GetReference((Span<byte>)bytes))
-            fixed (char* pChars = &MemoryMarshal.GetReference((Span<char>)chars))
+            fixed (byte* pBytes = &MemoryMarshal.GetArrayDataReference(bytes))
+            fixed (char* pChars = &MemoryMarshal.GetArrayDataReference(chars))
+            {
                 // Remember that charCount is # to decode, not size of array
                 return GetChars(pBytes + byteIndex, byteCount,
                                 pChars + charIndex, charCount, flush);
+            }
         }
 
         public override unsafe int GetChars(byte* bytes, int byteCount,
@@ -120,9 +118,8 @@ namespace System.Text
             ArgumentNullException.ThrowIfNull(bytes);
             ArgumentNullException.ThrowIfNull(chars);
 
-            if (byteCount < 0 || charCount < 0)
-                throw new ArgumentOutOfRangeException(byteCount < 0 ? nameof(byteCount) : nameof(charCount),
-                      SR.ArgumentOutOfRange_NeedNonNegNum);
+            ArgumentOutOfRangeException.ThrowIfNegative(byteCount);
+            ArgumentOutOfRangeException.ThrowIfNegative(charCount);
 
             // Remember our flush
             _mustFlush = flush;
@@ -142,13 +139,11 @@ namespace System.Text
             ArgumentNullException.ThrowIfNull(bytes);
             ArgumentNullException.ThrowIfNull(chars);
 
-            if (byteIndex < 0 || byteCount < 0)
-                throw new ArgumentOutOfRangeException(byteIndex < 0 ? nameof(byteIndex) : nameof(byteCount),
-                      SR.ArgumentOutOfRange_NeedNonNegNum);
+            ArgumentOutOfRangeException.ThrowIfNegative(byteIndex);
+            ArgumentOutOfRangeException.ThrowIfNegative(byteCount);
 
-            if (charIndex < 0 || charCount < 0)
-                throw new ArgumentOutOfRangeException(charIndex < 0 ? nameof(charIndex) : nameof(charCount),
-                      SR.ArgumentOutOfRange_NeedNonNegNum);
+            ArgumentOutOfRangeException.ThrowIfNegative(charIndex);
+            ArgumentOutOfRangeException.ThrowIfNegative(charCount);
 
             if (bytes.Length - byteIndex < byteCount)
                 throw new ArgumentOutOfRangeException(nameof(bytes),
@@ -159,13 +154,11 @@ namespace System.Text
                       SR.ArgumentOutOfRange_IndexCountBuffer);
 
             // Just call the pointer version (public overrides can't do this)
-            fixed (byte* pBytes = &MemoryMarshal.GetReference((Span<byte>)bytes))
+            fixed (byte* pBytes = &MemoryMarshal.GetArrayDataReference(bytes))
+            fixed (char* pChars = &MemoryMarshal.GetArrayDataReference(chars))
             {
-                fixed (char* pChars = &MemoryMarshal.GetReference((Span<char>)chars))
-                {
-                    Convert(pBytes + byteIndex, byteCount, pChars + charIndex, charCount, flush,
-                        out bytesUsed, out charsUsed, out completed);
-                }
+                Convert(pBytes + byteIndex, byteCount, pChars + charIndex, charCount, flush,
+                    out bytesUsed, out charsUsed, out completed);
             }
         }
 
@@ -178,9 +171,8 @@ namespace System.Text
             ArgumentNullException.ThrowIfNull(bytes);
             ArgumentNullException.ThrowIfNull(chars);
 
-            if (byteCount < 0 || charCount < 0)
-                throw new ArgumentOutOfRangeException(byteCount < 0 ? nameof(byteCount) : nameof(charCount),
-                    SR.ArgumentOutOfRange_NeedNonNegNum);
+            ArgumentOutOfRangeException.ThrowIfNegative(byteCount);
+            ArgumentOutOfRangeException.ThrowIfNegative(charCount);
 
             // We don't want to throw
             _mustFlush = flush;

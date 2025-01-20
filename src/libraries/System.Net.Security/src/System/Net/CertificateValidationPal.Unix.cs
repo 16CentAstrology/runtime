@@ -2,9 +2,9 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Diagnostics;
-using Microsoft.Win32.SafeHandles;
 using System.Net.Security;
 using System.Security.Cryptography.X509Certificates;
+using Microsoft.Win32.SafeHandles;
 
 namespace System.Net
 {
@@ -93,6 +93,44 @@ namespace System.Net
 
             if (NetEventSource.Log.IsEnabled()) NetEventSource.Log.RemoteCertificate(result);
             return result;
+        }
+
+        internal static bool IsLocalCertificateUsed(SafeFreeCredentials? _1, SafeDeleteContext? ctx)
+        {
+            if (ctx is not SafeSslHandle ssl)
+            {
+                return false;
+            }
+
+            if (!Interop.Ssl.SslSessionReused(ssl))
+            {
+                // Fresh session, we set the certificate on the SSL object only
+                // if the peer explicitly requested it.
+                return Interop.Ssl.SslGetCertificate(ssl) != IntPtr.Zero;
+            }
+
+            // resumed session, we keep the information about cert being used in the SSL_SESSION
+            // object's ex_data
+            bool addref = false;
+            try
+            {
+                // make sure the ssl is not freed while we accessing its SSL_SESSION
+                // this makes sure the `session` pointer is valid during this call
+                // despite not being a SafeHandle.
+                ssl.DangerousAddRef(ref addref);
+
+                // the information about certificate usage is stored in the session ex data
+                IntPtr session = Interop.Ssl.SslGetSession(ssl);
+                Debug.Assert(session != IntPtr.Zero);
+                return Interop.Ssl.SslSessionGetData(session) != IntPtr.Zero;
+            }
+            finally
+            {
+                if (addref)
+                {
+                    ssl.DangerousRelease();
+                }
+            }
         }
 
         //

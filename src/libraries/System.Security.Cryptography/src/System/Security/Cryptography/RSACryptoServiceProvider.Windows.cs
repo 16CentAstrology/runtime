@@ -54,10 +54,7 @@ namespace System.Security.Cryptography
 
         private RSACryptoServiceProvider(int keySize, CspParameters? parameters, bool useDefaultKeySize)
         {
-            if (keySize < 0)
-            {
-                throw new ArgumentOutOfRangeException("dwKeySize", "ArgumentOutOfRange_NeedNonNegNum");
-            }
+            ArgumentOutOfRangeException.ThrowIfNegative(keySize);
 
             _parameters = CapiHelper.SaveCspParameters(
                 CapiHelper.CspAlgorithmType.Rsa,
@@ -325,7 +322,7 @@ namespace System.Security.Cryptography
 
             if (fOAEP)
             {
-                int rsaSize = (KeySize + 7) / 8;
+                int rsaSize = GetMaxOutputSize();
                 const int OaepSha1Overhead = 20 + 20 + 2;
 
                 // Normalize the Windows 7 and Windows 8.1+ exception
@@ -442,7 +439,7 @@ namespace System.Security.Cryptography
         {
             int calgHash = CapiHelper.ObjToHashAlgId(halg);
             HashAlgorithmName hashAlgorithmName = CapiHelper.AlgIdToHashAlgorithmName(calgHash);
-            byte[] hashVal = HashOneShotHelpers.HashData(hashAlgorithmName, new ReadOnlySpan<byte>(buffer, offset, count));
+            byte[] hashVal = CryptographicOperations.HashData(hashAlgorithmName, new ReadOnlySpan<byte>(buffer, offset, count));
             return SignHash(hashVal, calgHash);
         }
 
@@ -457,7 +454,7 @@ namespace System.Security.Cryptography
         {
             int calgHash = CapiHelper.ObjToHashAlgId(halg);
             HashAlgorithmName hashAlgorithmName = CapiHelper.AlgIdToHashAlgorithmName(calgHash);
-            byte[] hashVal = HashOneShotHelpers.HashData(hashAlgorithmName, buffer);
+            byte[] hashVal = CryptographicOperations.HashData(hashAlgorithmName, buffer);
             return SignHash(hashVal, calgHash);
         }
 
@@ -472,7 +469,7 @@ namespace System.Security.Cryptography
         {
             int calgHash = CapiHelper.ObjToHashAlgId(halg);
             HashAlgorithmName hashAlgorithmName = CapiHelper.AlgIdToHashAlgorithmName(calgHash);
-            byte[] hashVal = HashOneShotHelpers.HashData(hashAlgorithmName, inputStream);
+            byte[] hashVal = CryptographicOperations.HashData(hashAlgorithmName, inputStream);
             return SignHash(hashVal, calgHash);
         }
 
@@ -525,7 +522,7 @@ namespace System.Security.Cryptography
         {
             int calgHash = CapiHelper.ObjToHashAlgId(halg);
             HashAlgorithmName hashAlgorithmName = CapiHelper.AlgIdToHashAlgorithmName(calgHash);
-            byte[] hashVal = HashOneShotHelpers.HashData(hashAlgorithmName, buffer);
+            byte[] hashVal = CryptographicOperations.HashData(hashAlgorithmName, buffer);
             return VerifyHash(hashVal, calgHash, signature);
         }
 
@@ -677,7 +674,7 @@ namespace System.Security.Cryptography
             }
         }
 
-        private static Exception PaddingModeNotSupported()
+        private static CryptographicException PaddingModeNotSupported()
         {
             return new CryptographicException(SR.Cryptography_InvalidPaddingMode);
         }

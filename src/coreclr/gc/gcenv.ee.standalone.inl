@@ -14,6 +14,9 @@ extern IGCToCLR* g_theGCToCLR;
 // GC version that the current runtime supports
 extern VersionInfo g_runtimeSupportedVersion;
 
+// Does the runtime use the old method table flags
+extern bool g_oldMethodTableFlags;
+
 struct StressLogMsg;
 
 // When we are building the GC in a standalone environment, we
@@ -183,10 +186,10 @@ inline void GCToEEInterface::StompWriteBarrier(WriteBarrierParameters* args)
     g_theGCToCLR->StompWriteBarrier(args);
 }
 
-inline void GCToEEInterface::EnableFinalization(bool foundFinalizers)
+inline void GCToEEInterface::EnableFinalization(bool gcHasWorkForFinalizerThread)
 {
     assert(g_theGCToCLR != nullptr);
-    g_theGCToCLR->EnableFinalization(foundFinalizers);
+    g_theGCToCLR->EnableFinalization(gcHasWorkForFinalizerThread);
 }
 
 inline void GCToEEInterface::HandleFatalError(unsigned int exitCode)
@@ -312,6 +315,26 @@ inline uint32_t GCToEEInterface::GetCurrentProcessCpuCount()
 inline void GCToEEInterface::DiagAddNewRegion(int generation, uint8_t* rangeStart, uint8_t* rangeEnd, uint8_t* rangeEndReserved)
 {
     g_theGCToCLR->DiagAddNewRegion(generation, rangeStart, rangeEnd, rangeEndReserved);
+}
+
+inline void GCToEEInterface::LogErrorToHost(const char *message)
+{
+    if (g_runtimeSupportedVersion.MajorVersion >= 1)
+    {
+        g_theGCToCLR->LogErrorToHost(message);
+    }
+}
+
+inline uint64_t GCToEEInterface::GetThreadOSThreadId(Thread* thread)
+{
+    if (g_runtimeSupportedVersion.MajorVersion >= 3)
+    {
+        return g_theGCToCLR->GetThreadOSThreadId(thread);
+    }
+    else
+    {
+        return 0;
+    }
 }
 
 #endif // __GCTOENV_EE_STANDALONE_INL__

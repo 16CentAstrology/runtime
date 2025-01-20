@@ -4,6 +4,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using Xunit;
 
@@ -233,7 +234,7 @@ namespace System.IO.Compression.Tests
                         using (Stream entrystream = entry.Open())
                         {
                             ReadAllBytes(entrystream, buffer, 0, buffer.Length);
-#if NETCOREAPP
+#if NET
                             uint zipcrc = entry.Crc32;
                             Assert.Equal(CRC.CalculateCRC(buffer), zipcrc);
 #endif
@@ -329,9 +330,9 @@ namespace System.IO.Compression.Tests
 
         public static void DirFileNamesEqual(string actual, string expected)
         {
-            IEnumerable<string> actualEntries = Directory.EnumerateFileSystemEntries(actual, "*", SearchOption.AllDirectories);
-            IEnumerable<string> expectedEntries = Directory.EnumerateFileSystemEntries(expected, "*", SearchOption.AllDirectories);
-            Assert.True(Enumerable.SequenceEqual(expectedEntries.Select(i => Path.GetFileName(i)), actualEntries.Select(i => Path.GetFileName(i))));
+            IOrderedEnumerable<string> actualEntries = Directory.EnumerateFileSystemEntries(actual, "*", SearchOption.AllDirectories).Order();
+            IOrderedEnumerable<string> expectedEntries = Directory.EnumerateFileSystemEntries(expected, "*", SearchOption.AllDirectories).Order();
+            AssertExtensions.SequenceEqual(expectedEntries.Select(Path.GetFileName).ToArray(), actualEntries.Select(Path.GetFileName).ToArray());
         }
 
         private static void ItemEqual(string[] actualList, List<FileData> expectedList, bool isFile)
@@ -497,6 +498,18 @@ namespace System.IO.Compression.Tests
             foreach (object[] e in SharedComment_Data())
             {
                 yield return e;
+            }
+        }
+
+        // Returns pairs encoded with Latin1, but decoded with UTF8.
+        // Returns: originalComment, expectedComment, transcoded expectedComment
+        public static IEnumerable<object[]> MismatchingEncodingComment_Data()
+        {
+            foreach (object[] e in Latin1Comment_Data())
+            {
+                byte[] expectedBytes = Encoding.Latin1.GetBytes(e[1] as string);
+                
+                yield return new object[] { e[0], e[1], Encoding.UTF8.GetString(expectedBytes) };
             }
         }
     }

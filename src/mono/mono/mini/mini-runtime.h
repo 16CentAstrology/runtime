@@ -27,17 +27,17 @@ typedef struct {
 	/* Maps methods/klasses to the address of the given type of trampoline */
 	GHashTable *jump_trampoline_hash;
 	GHashTable *jit_trampoline_hash;
-	GHashTable *delegate_trampoline_hash;
+	GHashTable *delegate_info_hash;
+	GHashTable *dyn_delegate_info_hash;
 	/* Maps ClassMethodPair -> MonoDelegateTrampInfo */
 	GHashTable *static_rgctx_trampoline_hash;
 	/* maps MonoMethod -> MonoJitDynamicMethodInfo */
 	GHashTable *dynamic_code_hash;
-	GHashTable *method_code_hash;
 	/* Maps methods to a RuntimeInvokeInfo structure, protected by the associated MonoDomain lock */
 	MonoConcurrentHashTable *runtime_invoke_hash;
 	/* Maps MonoMethod to a GPtrArray containing sequence point locations */
 	/* Protected by the domain lock */
-	GHashTable *seq_points;
+	dn_simdhash_ght_t *seq_points;
 	/* Debugger agent data */
 	gpointer agent_info;
 	/* Maps MonoMethod to an arch-specific structure */
@@ -54,17 +54,24 @@ typedef struct {
 	MonoInternalHashTable interp_code_hash;
 	/* Maps MonoMethod -> 	MonoMethodRuntimeGenericContext */
 	GHashTable *mrgctx_hash;
-	/* Maps gpointer -> InterpMethod */
-	GHashTable *interp_method_pointer_hash;
 	/* Protected by 'jit_code_hash_lock' */
 	MonoInternalHashTable jit_code_hash;
 	mono_mutex_t    jit_code_hash_lock;
+
+	/* Array of MonoJitInfo* */
+	GPtrArray *jit_infos;
 } MonoJitMemoryManager;
+
+static inline MonoJitMemoryManager*
+jit_mm_for_mm (MonoMemoryManager *mem_manager)
+{
+	return (MonoJitMemoryManager*)(mem_manager->runtime_info);
+}
 
 static inline MonoJitMemoryManager*
 get_default_jit_mm (void)
 {
-	return (MonoJitMemoryManager*)(mono_mem_manager_get_ambient ())->runtime_info;
+	return jit_mm_for_mm (mono_mem_manager_get_ambient ());
 }
 
 // FIXME: Review uses and change them to a more specific mem manager
@@ -611,6 +618,8 @@ void mono_jit_dump_cleanup (void);
 
 gpointer mini_alloc_generic_virtual_trampoline (MonoVTable *vtable, int size);
 MonoException* mini_get_stack_overflow_ex (void);
+MonoJitInfo* mini_alloc_jinfo (MonoJitMemoryManager *jit_mm, int size);
+void* mono_dyn_method_alloc0 (MonoMethod *method, guint size);
 
 /*
  * Per-OS implementation functions.
@@ -648,6 +657,12 @@ mono_post_native_crash_handler (const char *signal, MonoContext *mctx, MONO_SIG_
 gboolean
 mono_is_addr_implicit_null_check (void *addr);
 
+gboolean
+mono_jit_call_can_be_supported_by_interp (MonoMethod *method, MonoMethodSignature *sig, gboolean is_llvm_only);
+
+MONO_COMPONENT_API void
+mono_jit_memory_manager_foreach_seq_point (dn_simdhash_ght_t *seq_points, dn_simdhash_ght_foreach_func func, gpointer user_data);
+
 /*
  * Signal handling
  */
@@ -661,7 +676,9 @@ void MONO_SIG_HANDLER_SIGNATURE (mono_sigfpe_signal_handler) ;
 void MONO_SIG_HANDLER_SIGNATURE (mono_crashing_signal_handler) ;
 void MONO_SIG_HANDLER_SIGNATURE (mono_sigsegv_signal_handler);
 void MONO_SIG_HANDLER_SIGNATURE (mono_sigint_signal_handler) ;
+void MONO_SIG_HANDLER_SIGNATURE (mono_sigterm_signal_handler) ;
 gboolean MONO_SIG_HANDLER_SIGNATURE (mono_chain_signal);
+void mono_chain_signal_to_default_sigsegv_handler (void);
 
 #if defined (HOST_WASM)
 
@@ -707,5 +724,13 @@ void mini_register_sigterm_handler (void);
 		MONO_PROFILER_RAISE (jit_code_buffer, ((buf), (size), (MonoProfilerCodeBufferType)(type), (arg))); \
 	MONO_RESTORE_WARNING \
 	} while (0)
+
+typedef void (*MonoRuntimeInitCallback) (void);
+
+MONO_COMPONENT_API void
+mono_set_runtime_init_callback (MonoRuntimeInitCallback callback);
+
+MONO_COMPONENT_API void
+mono_invoke_runtime_init_callback (void);
 
 #endif /* __MONO_MINI_RUNTIME_H__ */

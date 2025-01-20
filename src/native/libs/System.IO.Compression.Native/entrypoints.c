@@ -22,15 +22,14 @@ static const Entry s_compressionNative[] =
     DllImportEntry(BrotliEncoderCreateInstance)
     DllImportEntry(BrotliEncoderDestroyInstance)
     DllImportEntry(BrotliEncoderHasMoreOutput)
+    DllImportEntry(BrotliEncoderMaxCompressedSize)
     DllImportEntry(BrotliEncoderSetParameter)
     DllImportEntry(CompressionNative_Crc32)
     DllImportEntry(CompressionNative_Deflate)
     DllImportEntry(CompressionNative_DeflateEnd)
-    DllImportEntry(CompressionNative_DeflateReset)
     DllImportEntry(CompressionNative_DeflateInit2_)
     DllImportEntry(CompressionNative_Inflate)
     DllImportEntry(CompressionNative_InflateEnd)
-    DllImportEntry(CompressionNative_InflateReset)
     DllImportEntry(CompressionNative_InflateInit2_)
 };
 

@@ -16,6 +16,12 @@ namespace ILLink.RoslynAnalyzer.Tests
 		}
 
 		[Fact]
+		public Task CanCompileILAssembly ()
+		{
+			return RunTest (allowMissingWarnings: true);
+		}
+
+		[Fact]
 		public Task CanCompileReferencesUsingTypes ()
 		{
 			return RunTest (allowMissingWarnings: true);
@@ -40,6 +46,24 @@ namespace ILLink.RoslynAnalyzer.Tests
 		}
 
 		[Fact]
+		public Task CanCompileTestCaseWithCsc ()
+		{
+			return RunTest (allowMissingWarnings: true);
+		}
+
+		[Fact]
+		public Task CanCompileTestCaseWithDebugPdbs ()
+		{
+			return RunTest (allowMissingWarnings: true);
+		}
+
+		[Fact]
+		public Task CanCompileTestCaseWithMcs ()
+		{
+			return RunTest (allowMissingWarnings: true);
+		}
+
+		[Fact]
 		public Task CanSandboxDependenciesUsingType ()
 		{
 			return RunTest (allowMissingWarnings: true);
@@ -47,6 +71,12 @@ namespace ILLink.RoslynAnalyzer.Tests
 
 		[Fact]
 		public Task CanVerifyInterfacesOnTypesInAssembly ()
+		{
+			return RunTest (allowMissingWarnings: true);
+		}
+
+		[Fact]
+		public Task ILVerificationWorks ()
 		{
 			return RunTest (allowMissingWarnings: true);
 		}
@@ -64,7 +94,7 @@ namespace ILLink.RoslynAnalyzer.Tests
 		}
 
 		[Fact]
-		public Task VerifyExpectModifiedAttributesWork ()
+		public Task VerifyDefineAttributeBehavior ()
 		{
 			return RunTest (allowMissingWarnings: true);
 		}

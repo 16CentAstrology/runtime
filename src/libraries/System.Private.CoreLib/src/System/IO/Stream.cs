@@ -11,7 +11,7 @@ using System.Threading.Tasks;
 
 namespace System.IO
 {
-    public abstract class Stream : MarshalByRefObject, IDisposable, IAsyncDisposable
+    public abstract partial class Stream : MarshalByRefObject, IDisposable, IAsyncDisposable
     {
         public static readonly Stream Null = new NullStream();
 
@@ -22,9 +22,7 @@ namespace System.IO
         private protected SemaphoreSlim EnsureAsyncActiveSemaphoreInitialized() =>
             // Lazily-initialize _asyncActiveSemaphore.  As we're never accessing the SemaphoreSlim's
             // WaitHandle, we don't need to worry about Disposing it in the case of a race condition.
-#pragma warning disable CS8774 // We lack a NullIffNull annotation for Volatile.Read
-            Volatile.Read(ref _asyncActiveSemaphore) ??
-#pragma warning restore CS8774
+            _asyncActiveSemaphore ??
             Interlocked.CompareExchange(ref _asyncActiveSemaphore, new SemaphoreSlim(1, 1), null) ??
             _asyncActiveSemaphore;
 
@@ -449,14 +447,6 @@ namespace System.IO
             return totalRead;
         }
 
-        [Intrinsic]
-        [MethodImpl(MethodImplOptions.InternalCall)]
-        private extern bool HasOverriddenBeginEndRead();
-
-        [Intrinsic]
-        [MethodImpl(MethodImplOptions.InternalCall)]
-        private extern bool HasOverriddenBeginEndWrite();
-
         private Task<int> BeginEndReadAsync(byte[] buffer, int offset, int count)
         {
             if (!HasOverriddenBeginEndRead())
@@ -686,7 +676,7 @@ namespace System.IO
                 {
                     _callback = callback;
                     _context = ExecutionContext.Capture();
-                    base.AddCompletionAction(this);
+                    AddCompletionAction(this);
                 }
             }
 
@@ -933,7 +923,7 @@ namespace System.IO
             }
         }
 
-        public virtual void WriteByte(byte value) => Write(new byte[1] { value }, 0, 1);
+        public virtual void WriteByte(byte value) => Write([value], 0, 1);
 
         public static Stream Synchronized(Stream stream)
         {
@@ -997,10 +987,7 @@ namespace System.IO
         {
             ArgumentNullException.ThrowIfNull(destination);
 
-            if (bufferSize <= 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(bufferSize), bufferSize, SR.ArgumentOutOfRange_NeedPosNum);
-            }
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(bufferSize);
 
             if (!destination.CanWrite)
             {
@@ -1044,16 +1031,16 @@ namespace System.IO
                     Task.CompletedTask;
 
             public override IAsyncResult BeginRead(byte[] buffer, int offset, int count, AsyncCallback? callback, object? state) =>
-                TaskToApm.Begin(Task<int>.s_defaultResultTask, callback, state);
+                TaskToAsyncResult.Begin(Task<int>.s_defaultResultTask, callback, state);
 
             public override int EndRead(IAsyncResult asyncResult) =>
-                TaskToApm.End<int>(asyncResult);
+                TaskToAsyncResult.End<int>(asyncResult);
 
             public override IAsyncResult BeginWrite(byte[] buffer, int offset, int count, AsyncCallback? callback, object? state) =>
-                TaskToApm.Begin(Task.CompletedTask, callback, state);
+                TaskToAsyncResult.Begin(Task.CompletedTask, callback, state);
 
             public override void EndWrite(IAsyncResult asyncResult) =>
-                TaskToApm.End(asyncResult);
+                TaskToAsyncResult.End(asyncResult);
 
             public override int Read(byte[] buffer, int offset, int count) => 0;
 

@@ -1,7 +1,6 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using Microsoft.Win32.SafeHandles;
 using System;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -9,6 +8,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text;
+using Microsoft.Win32.SafeHandles;
 
 namespace System.Security.Principal
 {
@@ -400,10 +400,7 @@ namespace System.Security.Principal
             // Negative offsets are not allowed
             //
 
-            if (offset < 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(offset), offset, SR.ArgumentOutOfRange_NeedNonNegNum);
-            }
+            ArgumentOutOfRangeException.ThrowIfNegative(offset);
 
             //
             // At least a minimum-size SID should fit in the buffer
@@ -864,7 +861,10 @@ namespace System.Security.Principal
 
         public int CompareTo(SecurityIdentifier? sid)
         {
-            ArgumentNullException.ThrowIfNull(sid);
+            if (sid is null)
+            {
+                return 1;
+            }
 
             if (this.IdentifierAuthority < sid.IdentifierAuthority)
             {

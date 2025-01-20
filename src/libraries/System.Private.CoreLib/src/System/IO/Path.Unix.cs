@@ -101,9 +101,9 @@ namespace System.IO
             // that'll result in a unique file name.
             string tempPath = Path.GetTempPath();
             int tempPathByteCount = Encoding.UTF8.GetByteCount(tempPath);
-            int totalByteCount = tempPathByteCount + fileTemplate.Length + 1;
+            int totalByteCount = checked(tempPathByteCount + fileTemplate.Length + 1);
 
-            Span<byte> path = totalByteCount <= 256 ? stackalloc byte[256].Slice(0, totalByteCount) : new byte[totalByteCount];
+            Span<byte> path = (uint)totalByteCount <= 256 ? stackalloc byte[totalByteCount] : new byte[totalByteCount];
             int pos = Encoding.UTF8.GetBytes(tempPath, path);
             fileTemplate.CopyTo(path.Slice(pos));
             path[^1] = 0;
@@ -112,7 +112,7 @@ namespace System.IO
             fixed (byte* pPath = path)
             {
                 // if this returns ENOENT it's because TMPDIR doesn't exist, so isDirError:true
-                IntPtr fd = Interop.CheckIo(Interop.Sys.MksTemps(pPath, SuffixByteLength), tempPath, isDirError:true);
+                IntPtr fd = Interop.CheckIo(Interop.Sys.MksTemps(pPath, SuffixByteLength), tempPath, isDirError: true);
                 Interop.Sys.Close(fd); // ignore any errors from close; nothing to do if cleanup isn't possible
             }
 
@@ -131,7 +131,7 @@ namespace System.IO
 
         public static bool IsPathRooted(ReadOnlySpan<char> path)
         {
-            return path.Length > 0 && path[0] == PathInternal.DirectorySeparatorChar;
+            return path.StartsWith(PathInternal.DirectorySeparatorChar);
         }
 
         /// <summary>

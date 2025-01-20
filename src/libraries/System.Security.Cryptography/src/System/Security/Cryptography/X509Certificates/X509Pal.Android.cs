@@ -18,7 +18,7 @@ namespace System.Security.Cryptography.X509Certificates
             return new AndroidX509Pal();
         }
 
-        private sealed partial class AndroidX509Pal : ManagedX509ExtensionProcessor, IX509Pal
+        private sealed partial class AndroidX509Pal : IX509Pal
         {
             public ECDsa DecodeECDsaPublicKey(ICertificatePal? certificatePal)
             {
@@ -89,7 +89,7 @@ namespace System.Security.Cryptography.X509Certificates
 
             public X509ContentType GetCertContentType(ReadOnlySpan<byte> rawData)
             {
-                if (rawData == null || rawData.Length == 0)
+                if (rawData.IsEmpty)
                     throw new CryptographicException();
 
                 X509ContentType contentType = Interop.AndroidCrypto.X509GetContentType(rawData);
@@ -98,7 +98,7 @@ namespace System.Security.Cryptography.X509Certificates
                     return contentType;
                 }
 
-                if (AndroidPkcs12Reader.IsPkcs12(rawData))
+                if (X509CertificateLoader.IsPkcs12(rawData))
                 {
                     return X509ContentType.Pkcs12;
                 }
@@ -155,23 +155,23 @@ namespace System.Security.Cryptography.X509Certificates
                 AsnWriter writer = new AsnWriter(AsnEncodingRules.DER);
                 spki.Encode(writer);
 
-                byte[] rented = CryptoPool.Rent(writer.GetEncodedLength());
-
-                int written = writer.Encode(rented);
-
                 DSA dsa = DSA.Create();
-                IDisposable? toDispose = dsa;
+                DSA? toDispose = dsa;
 
                 try
                 {
-                   dsa.ImportSubjectPublicKeyInfo(rented.AsSpan(0, written), out _);
-                   toDispose = null;
-                   return dsa;
+                    writer.Encode(dsa, static (dsa, encoded) =>
+                    {
+                        dsa.ImportSubjectPublicKeyInfo(encoded, out _);
+                        return (object?)null;
+                    });
+
+                    toDispose = null;
+                    return dsa;
                 }
                 finally
                 {
                     toDispose?.Dispose();
-                    CryptoPool.Return(rented, written);
                 }
             }
         }

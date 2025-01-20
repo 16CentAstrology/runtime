@@ -1147,7 +1147,7 @@ namespace System.Xml.Serialization
                 prefix = XmlConvert.DecodeName(prefix);
                 localName = XmlConvert.DecodeName(localName);
             }
-            if (prefix == null || prefix.Length == 0)
+            if (string.IsNullOrEmpty(prefix))
             {
                 return new XmlQualifiedName(_r.NameTable.Add(value), _r.LookupNamespace(string.Empty));
             }
@@ -1341,6 +1341,7 @@ namespace System.Xml.Serialization
             //XmlSerializableMissingClrType= Type '{0}' from namespace '{1}' doesnot have corresponding IXmlSerializable type. Please consider adding {2} to '{3}'.
         }
 
+        [RequiresDynamicCode(XmlSerializer.AotSerializationWarning)]
         protected Array EnsureArrayIndex(Array? a, int index, Type elementType)
         {
             if (a == null) return Array.CreateInstance(elementType, 32);
@@ -1350,6 +1351,7 @@ namespace System.Xml.Serialization
             return b;
         }
 
+        [RequiresDynamicCode(XmlSerializer.AotSerializationWarning)]
         protected Array? ShrinkArray(Array? a, int length, Type elementType, bool isNullable)
         {
             if (a == null)
@@ -1375,7 +1377,7 @@ namespace System.Xml.Serialization
             string str = _r.ReadString();
             if (str != null && trim)
                 str = str.Trim();
-            if (value == null || value.Length == 0)
+            if (string.IsNullOrEmpty(value))
                 return str;
             return value + str;
         }
@@ -1548,7 +1550,8 @@ namespace System.Xml.Serialization
         }
 
         [RequiresUnreferencedCode("calls GetArrayElementType")]
-        private object? ReadArray(string? typeName, string? typeNs)
+        [RequiresDynamicCode(XmlSerializer.AotSerializationWarning)]
+        private Array? ReadArray(string? typeName, string? typeNs)
         {
             SoapArrayInfo arrayInfo;
             Type? fallbackElementType = null;
@@ -1748,9 +1751,11 @@ namespace System.Xml.Serialization
         }
 
         [RequiresUnreferencedCode(XmlSerializer.TrimSerializationWarning)]
+        [RequiresDynamicCode(XmlSerializer.AotSerializationWarning)]
         protected abstract void InitCallbacks();
 
         [RequiresUnreferencedCode(XmlSerializer.TrimSerializationWarning)]
+        [RequiresDynamicCode(XmlSerializer.AotSerializationWarning)]
         protected void ReadReferencedElements()
         {
             _r.MoveToContent();
@@ -1765,24 +1770,28 @@ namespace System.Xml.Serialization
         }
 
         [RequiresUnreferencedCode(XmlSerializer.TrimSerializationWarning)]
+        [RequiresDynamicCode(XmlSerializer.AotSerializationWarning)]
         protected object? ReadReferencedElement()
         {
             return ReadReferencedElement(null, null);
         }
 
         [RequiresUnreferencedCode(XmlSerializer.TrimSerializationWarning)]
+        [RequiresDynamicCode(XmlSerializer.AotSerializationWarning)]
         protected object? ReadReferencedElement(string? name, string? ns)
         {
             return ReadReferencingElement(name, ns, out _);
         }
 
         [RequiresUnreferencedCode(XmlSerializer.TrimSerializationWarning)]
+        [RequiresDynamicCode(XmlSerializer.AotSerializationWarning)]
         protected object? ReadReferencingElement(out string? fixupReference)
         {
             return ReadReferencingElement(null, null, out fixupReference);
         }
 
         [RequiresUnreferencedCode(XmlSerializer.TrimSerializationWarning)]
+        [RequiresDynamicCode(XmlSerializer.AotSerializationWarning)]
         protected object? ReadReferencingElement(string? name, string? ns, out string? fixupReference)
         {
             return ReadReferencingElement(name, ns, false, out fixupReference);
@@ -1790,6 +1799,7 @@ namespace System.Xml.Serialization
 
         [MemberNotNull(nameof(_callbacks))]
         [RequiresUnreferencedCode(XmlSerializer.TrimSerializationWarning)]
+        [RequiresDynamicCode(XmlSerializer.AotSerializationWarning)]
         protected object? ReadReferencingElement(string? name, string? ns, bool elementCanBeType, out string? fixupReference)
         {
             object? o;
@@ -1829,6 +1839,7 @@ namespace System.Xml.Serialization
 
         [MemberNotNull(nameof(_callbacks))]
         [RequiresUnreferencedCode("calls InitCallbacks")]
+        [RequiresDynamicCode(XmlSerializer.AotSerializationWarning)]
         internal void EnsureCallbackTables()
         {
             if (_callbacks == null)
@@ -3319,7 +3330,7 @@ namespace System.Xml.Serialization
                         // find anyElement if present.
                         for (int j = 0; j < mapping.Elements!.Length; j++)
                         {
-                            if (mapping.Elements[j].Any && (mapping.Elements[j].Name == null || mapping.Elements[j].Name.Length == 0))
+                            if (mapping.Elements[j].Any && string.IsNullOrEmpty(mapping.Elements[j].Name))
                             {
                                 anyElement = member;
                                 break;
@@ -3979,7 +3990,7 @@ namespace System.Xml.Serialization
                 {
                     ElementAccessor e = elements[j];
                     string? ns = e.Form == XmlSchemaForm.Qualified ? e.Namespace : "";
-                    if (e.Any && (e.Name == null || e.Name.Length == 0)) continue;
+                    if (e.Any && string.IsNullOrEmpty(e.Name)) continue;
 
                     if (!firstElement)
                         qnames += ", ";
@@ -4198,7 +4209,7 @@ namespace System.Xml.Serialization
                 {
                     ElementAccessor e = elements[j];
                     string? ns = e.Form == XmlSchemaForm.Qualified ? e.Namespace : "";
-                    if (!isSequence && e.Any && (e.Name == null || e.Name.Length == 0)) continue;
+                    if (!isSequence && e.Any && string.IsNullOrEmpty(e.Name)) continue;
                     if (!isSequence)
                     {
                         if (firstElement && count == 0)

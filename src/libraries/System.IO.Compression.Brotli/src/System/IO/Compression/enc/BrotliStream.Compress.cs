@@ -16,15 +16,31 @@ namespace System.IO.Compression
         /// <summary>Initializes a new instance of the <see cref="System.IO.Compression.BrotliStream" /> class by using the specified stream and compression level.</summary>
         /// <param name="stream">The stream to which compressed data is written.</param>
         /// <param name="compressionLevel">One of the enumeration values that indicates whether to emphasize speed or compression efficiency when compressing data to the stream.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="stream"/> is <see langword="null" />.</exception>
         public BrotliStream(Stream stream, CompressionLevel compressionLevel) : this(stream, compressionLevel, leaveOpen: false) { }
 
         /// <summary>Initializes a new instance of the <see cref="System.IO.Compression.BrotliStream" /> class by using the specified stream and compression level, and optionally leaves the stream open.</summary>
         /// <param name="stream">The stream to which compressed data is written.</param>
         /// <param name="compressionLevel">One of the enumeration values that indicates whether to emphasize speed or compression efficiency when compressing data to the stream.</param>
         /// <param name="leaveOpen"><see langword="true" /> to leave the stream open after disposing the <see cref="System.IO.Compression.BrotliStream" /> object; otherwise, <see langword="false" />.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="stream"/> is <see langword="null" />.</exception>
         public BrotliStream(Stream stream, CompressionLevel compressionLevel, bool leaveOpen) : this(stream, CompressionMode.Compress, leaveOpen)
         {
             _encoder.SetQuality(BrotliUtils.GetQualityFromCompressionLevel(compressionLevel));
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="System.IO.Compression.BrotliStream" /> class by using the specified stream and compression options, and optionally leaves the stream open.
+        /// </summary>
+        /// <param name="stream">The stream to which compressed data is written.</param>
+        /// <param name="compressionOptions">The Brotli options for fine tuning the compression stream.</param>
+        /// <param name="leaveOpen"><see langword="true" /> to leave the stream open after disposing the <see cref="System.IO.Compression.BrotliStream" /> object; otherwise, <see langword="false" />.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="stream"/> or <paramref name="compressionOptions"/> is <see langword="null" />.</exception>
+        public BrotliStream(Stream stream, BrotliCompressionOptions compressionOptions, bool leaveOpen = false) : this(stream, CompressionMode.Compress, leaveOpen)
+        {
+            ArgumentNullException.ThrowIfNull(compressionOptions);
+
+            _encoder.SetQuality(compressionOptions.Quality);
         }
 
         /// <summary>Writes compressed bytes to the underlying stream from the specified byte array.</summary>
@@ -94,13 +110,13 @@ namespace System.IO.Compression
         /// <exception cref="System.NotSupportedException">The current <see cref="System.IO.Compression.BrotliStream" /> implementation does not support the write operation.</exception>
         /// <exception cref="System.InvalidOperationException">The write operation cannot be performed because the stream is closed.</exception>
         public override IAsyncResult BeginWrite(byte[] buffer, int offset, int count, AsyncCallback? asyncCallback, object? asyncState) =>
-            TaskToApm.Begin(WriteAsync(buffer, offset, count, CancellationToken.None), asyncCallback, asyncState);
+            TaskToAsyncResult.Begin(WriteAsync(buffer, offset, count, CancellationToken.None), asyncCallback, asyncState);
 
         /// <summary>Handles the end of an asynchronous write operation. (Consider using the <see cref="System.IO.Stream.WriteAsync(byte[],int,int)" /> method instead.)</summary>
         /// <param name="asyncResult">The object that represents the asynchronous call.</param>
         /// <exception cref="System.InvalidOperationException">The underlying stream is closed or <see langword="null" />.</exception>
         public override void EndWrite(IAsyncResult asyncResult) =>
-            TaskToApm.End(asyncResult);
+            TaskToAsyncResult.End(asyncResult);
 
         /// <summary>Asynchronously writes compressed bytes to the underlying Brotli stream from the specified byte array.</summary>
         /// <param name="buffer">The buffer that contains the data to compress.</param>

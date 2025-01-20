@@ -13,7 +13,7 @@ namespace System.Text.Json
         /// Writes the pre-encoded property name and <see cref="DateTimeOffset"/> value (as a JSON string) as part of a name/value pair of a JSON object.
         /// </summary>
         /// <param name="propertyName">The JSON-encoded name of the property to write.</param>
-        /// <param name="value">The value to to write.</param>
+        /// <param name="value">The value to write.</param>
         /// <exception cref="InvalidOperationException">
         /// Thrown if this would result in invalid JSON being written (while validation is enabled).
         /// </exception>
@@ -35,7 +35,7 @@ namespace System.Text.Json
         /// Writes the property name and <see cref="DateTimeOffset"/> value (as a JSON string) as part of a name/value pair of a JSON object.
         /// </summary>
         /// <param name="propertyName">The name of the property to write.</param>
-        /// <param name="value">The value to to write.</param>
+        /// <param name="value">The value to write.</param>
         /// <exception cref="ArgumentException">
         /// Thrown when the specified property name is too large.
         /// </exception>
@@ -62,7 +62,7 @@ namespace System.Text.Json
         /// Writes the property name and <see cref="DateTimeOffset"/> value (as a JSON string) as part of a name/value pair of a JSON object.
         /// </summary>
         /// <param name="propertyName">The name of the property to write.</param>
-        /// <param name="value">The value to to write.</param>
+        /// <param name="value">The value to write.</param>
         /// <exception cref="ArgumentException">
         /// Thrown when the specified property name is too large.
         /// </exception>
@@ -87,7 +87,7 @@ namespace System.Text.Json
         /// Writes the property name and <see cref="DateTimeOffset"/> value (as a JSON string) as part of a name/value pair of a JSON object.
         /// </summary>
         /// <param name="utf8PropertyName">The UTF-8 encoded property name of the JSON object to be written.</param>
-        /// <param name="value">The value to to write.</param>
+        /// <param name="value">The value to write.</param>
         /// <exception cref="ArgumentException">
         /// Thrown when the specified property name is too large.
         /// </exception>
@@ -283,13 +283,13 @@ namespace System.Text.Json
         private void WriteStringIndented(ReadOnlySpan<char> escapedPropertyName, DateTimeOffset value)
         {
             int indent = Indentation;
-            Debug.Assert(indent <= 2 * _options.MaxDepth);
+            Debug.Assert(indent <= _indentLength * _options.MaxDepth);
 
-            Debug.Assert(escapedPropertyName.Length < (int.MaxValue / JsonConstants.MaxExpansionFactorWhileTranscoding) - indent - JsonConstants.MaximumFormatDateTimeOffsetLength - 7 - s_newLineLength);
+            Debug.Assert(escapedPropertyName.Length < (int.MaxValue / JsonConstants.MaxExpansionFactorWhileTranscoding) - indent - JsonConstants.MaximumFormatDateTimeOffsetLength - 7 - _newLineLength);
 
             // All ASCII, 2 quotes for property name, 2 quotes for date, 1 colon, and 1 space => escapedPropertyName.Length + JsonConstants.MaximumFormatDateTimeOffsetLength + 6
             // Optionally, 1 list separator, 1-2 bytes for new line, and up to 3x growth when transcoding
-            int maxRequired = indent + (escapedPropertyName.Length * JsonConstants.MaxExpansionFactorWhileTranscoding) + JsonConstants.MaximumFormatDateTimeOffsetLength + 7 + s_newLineLength;
+            int maxRequired = indent + (escapedPropertyName.Length * JsonConstants.MaxExpansionFactorWhileTranscoding) + JsonConstants.MaximumFormatDateTimeOffsetLength + 7 + _newLineLength;
 
             if (_memory.Length - BytesPending < maxRequired)
             {
@@ -310,7 +310,7 @@ namespace System.Text.Json
                 WriteNewLine(output);
             }
 
-            JsonWriterHelper.WriteIndentation(output.Slice(BytesPending), indent);
+            WriteIndentation(output.Slice(BytesPending), indent);
             BytesPending += indent;
 
             output[BytesPending++] = JsonConstants.Quote;
@@ -332,12 +332,12 @@ namespace System.Text.Json
         private void WriteStringIndented(ReadOnlySpan<byte> escapedPropertyName, DateTimeOffset value)
         {
             int indent = Indentation;
-            Debug.Assert(indent <= 2 * _options.MaxDepth);
+            Debug.Assert(indent <= _indentLength * _options.MaxDepth);
 
-            Debug.Assert(escapedPropertyName.Length < int.MaxValue - indent - JsonConstants.MaximumFormatDateTimeOffsetLength - 7 - s_newLineLength);
+            Debug.Assert(escapedPropertyName.Length < int.MaxValue - indent - JsonConstants.MaximumFormatDateTimeOffsetLength - 7 - _newLineLength);
 
             int minRequired = indent + escapedPropertyName.Length + JsonConstants.MaximumFormatDateTimeOffsetLength + 6; // 2 quotes for property name, 2 quotes for date, 1 colon, and 1 space
-            int maxRequired = minRequired + 1 + s_newLineLength; // Optionally, 1 list separator and 1-2 bytes for new line
+            int maxRequired = minRequired + 1 + _newLineLength; // Optionally, 1 list separator and 1-2 bytes for new line
 
             if (_memory.Length - BytesPending < maxRequired)
             {
@@ -358,7 +358,7 @@ namespace System.Text.Json
                 WriteNewLine(output);
             }
 
-            JsonWriterHelper.WriteIndentation(output.Slice(BytesPending), indent);
+            WriteIndentation(output.Slice(BytesPending), indent);
             BytesPending += indent;
 
             output[BytesPending++] = JsonConstants.Quote;

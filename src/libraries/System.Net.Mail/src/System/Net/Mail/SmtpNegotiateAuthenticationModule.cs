@@ -11,7 +11,7 @@ namespace System.Net.Mail
 {
     internal sealed class SmtpNegotiateAuthenticationModule : ISmtpAuthenticationModule
     {
-        private static byte[] _saslNoSecurtyLayerToken = new byte[] { 1, 0, 0, 0 };
+        private static readonly byte[] s_saslNoSecurtyLayerToken = new byte[] { 1, 0, 0, 0 };
         private readonly Dictionary<object, NegotiateAuthentication> _sessions = new Dictionary<object, NegotiateAuthentication>();
 
         internal SmtpNegotiateAuthenticationModule()
@@ -62,10 +62,6 @@ namespace System.Net.Mail
                         statusCode != NegotiateAuthenticationStatusCode.ContinueNeeded)
                     {
                         return null;
-                    }
-                    if (clientContext.IsAuthenticated && resp == null)
-                    {
-                        resp = "\r\n";
                     }
                 }
                 else
@@ -168,7 +164,7 @@ namespace System.Net.Mail
 
             // let MakeSignature figure out length of output
             ArrayBufferWriter<byte> outputWriter = new ArrayBufferWriter<byte>();
-            statusCode = clientContext.Wrap(_saslNoSecurtyLayerToken, outputWriter, false, out _);
+            statusCode = clientContext.Wrap(s_saslNoSecurtyLayerToken, outputWriter, false, out _);
             if (statusCode != NegotiateAuthenticationStatusCode.Completed)
             {
                 return null;

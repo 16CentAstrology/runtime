@@ -14,7 +14,8 @@ namespace System.Net.WebSockets
     public sealed class ClientWebSocketOptions
     {
         private bool _isReadOnly; // After ConnectAsync is called the options cannot be modified.
-        private TimeSpan _keepAliveInterval = WebSocket.DefaultKeepAliveInterval;
+        private TimeSpan _keepAliveInterval = WebSocketDefaults.DefaultClientKeepAliveInterval;
+        private TimeSpan _keepAliveTimeout = WebSocketDefaults.DefaultKeepAliveTimeout;
         private bool _useDefaultCredentials;
         private ICredentials? _credentials;
         private IWebProxy? _proxy;
@@ -171,6 +172,12 @@ namespace System.Net.WebSockets
             subprotocols.Add(subProtocol);
         }
 
+        /// <summary>
+        /// The keep-alive interval to use, or <see cref="TimeSpan.Zero"/> or <see cref="Timeout.InfiniteTimeSpan"/> to disable keep-alives.
+        /// If <see cref="ClientWebSocketOptions.KeepAliveTimeout"/> is set, then PING messages are sent and peer's PONG responses are expected, otherwise,
+        /// unsolicited PONG messages are used as a keep-alive heartbeat.
+        /// The default is <see cref="WebSocket.DefaultKeepAliveInterval"/> (typically 30 seconds).
+        /// </summary>
         [UnsupportedOSPlatform("browser")]
         public TimeSpan KeepAliveInterval
         {
@@ -185,6 +192,28 @@ namespace System.Net.WebSockets
                         Timeout.InfiniteTimeSpan.ToString()));
                 }
                 _keepAliveInterval = value;
+            }
+        }
+
+        /// <summary>
+        /// The timeout to use when waiting for the peer's PONG in response to us sending a PING; or <see cref="TimeSpan.Zero"/> or
+        /// <see cref="Timeout.InfiniteTimeSpan"/> to disable waiting for peer's response, and use an unsolicited PONG as a Keep-Alive heartbeat instead.
+        /// The default is <see cref="Timeout.InfiniteTimeSpan"/>.
+        /// </summary>
+        [UnsupportedOSPlatform("browser")]
+        public TimeSpan KeepAliveTimeout
+        {
+            get => _keepAliveTimeout;
+            set
+            {
+                ThrowIfReadOnly();
+                if (value != Timeout.InfiniteTimeSpan && value < TimeSpan.Zero)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(value), value,
+                        SR.Format(SR.net_WebSockets_ArgumentOutOfRange_TooSmall,
+                        Timeout.InfiniteTimeSpan.ToString()));
+                }
+                _keepAliveTimeout = value;
             }
         }
 
@@ -208,14 +237,8 @@ namespace System.Net.WebSockets
         {
             ThrowIfReadOnly();
 
-            if (receiveBufferSize <= 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(receiveBufferSize), receiveBufferSize, SR.Format(SR.net_WebSockets_ArgumentOutOfRange_TooSmall, 1));
-            }
-            if (sendBufferSize <= 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(sendBufferSize), sendBufferSize, SR.Format(SR.net_WebSockets_ArgumentOutOfRange_TooSmall, 1));
-            }
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(receiveBufferSize);
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(sendBufferSize);
 
             _receiveBufferSize = receiveBufferSize;
             _buffer = null;
@@ -226,20 +249,11 @@ namespace System.Net.WebSockets
         {
             ThrowIfReadOnly();
 
-            if (receiveBufferSize <= 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(receiveBufferSize), receiveBufferSize, SR.Format(SR.net_WebSockets_ArgumentOutOfRange_TooSmall, 1));
-            }
-            if (sendBufferSize <= 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(sendBufferSize), sendBufferSize, SR.Format(SR.net_WebSockets_ArgumentOutOfRange_TooSmall, 1));
-            }
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(receiveBufferSize);
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(sendBufferSize);
 
             WebSocketValidate.ValidateArraySegment(buffer, nameof(buffer));
-            if (buffer.Count == 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(buffer));
-            }
+            ArgumentOutOfRangeException.ThrowIfZero(buffer.Count, nameof(buffer));
 
             _receiveBufferSize = receiveBufferSize;
             _buffer = buffer;

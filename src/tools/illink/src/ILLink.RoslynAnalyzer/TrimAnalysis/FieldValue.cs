@@ -9,13 +9,18 @@ using Microsoft.CodeAnalysis;
 
 namespace ILLink.Shared.TrimAnalysis
 {
-	partial record FieldValue
+	internal partial record FieldValue
 	{
-		public FieldValue (IFieldSymbol fieldSymbol) => FieldSymbol = fieldSymbol;
+		public FieldValue (IFieldSymbol fieldSymbol)
+		{
+			FieldSymbol = fieldSymbol;
+			StaticType = new (fieldSymbol.Type);
+			DynamicallyAccessedMemberTypes = FlowAnnotations.GetFieldAnnotation (fieldSymbol);
+		}
 
 		public readonly IFieldSymbol FieldSymbol;
 
-		public override DynamicallyAccessedMemberTypes DynamicallyAccessedMemberTypes => FieldSymbol.GetDynamicallyAccessedMemberTypes ();
+		public override DynamicallyAccessedMemberTypes DynamicallyAccessedMemberTypes { get; }
 
 		public override IEnumerable<string> GetDiagnosticArgumentsForAnnotationMismatch ()
 			=> new string[] { FieldSymbol.GetDisplayName () };

@@ -1144,10 +1144,10 @@ namespace SerializationTypes
         Option0, Option1, Option2
     }
 
-    public class TypeWithNestedGenericClassImplementingIXmlSerialiable
+    public class TypeWithNestedGenericClassImplementingIXmlSerializable
     {
         // T can only be string
-        public class NestedGenericClassImplementingIXmlSerialiable<T> : IXmlSerializable
+        public class NestedGenericClassImplementingIXmlSerializable<T> : IXmlSerializable
         {
             public static bool WriteXmlInvoked = false;
             public static bool ReadXmlInvoked = false;
@@ -1155,7 +1155,7 @@ namespace SerializationTypes
             public string StringValue { get; set; }
             private T GenericValue { get; set; }
 
-            public NestedGenericClassImplementingIXmlSerialiable()
+            public NestedGenericClassImplementingIXmlSerializable()
             {
                 GenericValue = default(T);
             }
@@ -4145,6 +4145,9 @@ public class MyArgumentException : Exception, ISerializable
         _paramName = paramName;
     }
 
+#if NET8_0_OR_GREATER
+    [Obsolete("Exception..ctor(SerializationInfo, StreamingContext) is obsolete.", DiagnosticId = "SYSLIB0051")]
+#endif
     protected MyArgumentException(SerializationInfo info, StreamingContext context) : base(info, context) {
         _paramName = info.GetString("ParamName");
     }
@@ -4161,6 +4164,9 @@ public class MyArgumentException : Exception, ISerializable
         }
     }
 
+#if NET8_0_OR_GREATER
+    [Obsolete("Exception.GetObjectData is obsolete.", DiagnosticId = "SYSLIB0051")]
+#endif
     public override void GetObjectData(SerializationInfo info, StreamingContext context)
     {
         if (info == null)

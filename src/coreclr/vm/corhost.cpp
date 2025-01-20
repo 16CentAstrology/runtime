@@ -36,7 +36,11 @@
 #include "dwreport.h"
 #endif // !TARGET_UNIX
 
+#include "nativelibrary.h"
+
 #ifndef DACCESS_COMPILE
+
+#include <corehost/host_runtime_contract.h>
 
 extern void STDMETHODCALLTYPE EEShutDown(BOOL fIsDllUnloading);
 
@@ -306,6 +310,15 @@ HRESULT CorHost2::ExecuteAssembly(DWORD dwAppDomainId,
 
     _ASSERTE (!pThread->PreemptiveGCDisabled());
 
+    if (g_EntryAssemblyPath == NULL)
+    {
+        // Store the entry assembly path for diagnostic purposes (for example, dumps)
+        size_t len = u16_strlen(pwzAssemblyPath) + 1;
+        NewArrayHolder<WCHAR> path { new WCHAR[len] };
+        wcscpy_s(path, len, pwzAssemblyPath);
+        g_EntryAssemblyPath = path.Extract();
+    }
+
     Assembly *pAssembly = AssemblySpec::LoadAssembly(pwzAssemblyPath);
 
 #if defined(FEATURE_MULTICOREJIT)
@@ -546,11 +559,11 @@ HRESULT CorHost2::CreateAppDomainWithManager(
 
     BEGIN_EXTERNAL_ENTRYPOINT(&hr);
 
-    AppDomain* pDomain = SystemDomain::System()->DefaultDomain();
+    AppDomain* pDomain = AppDomain::GetCurrentDomain();
 
     pDomain->SetFriendlyName(wszFriendlyName);
 
-    ETW::LoaderLog::DomainLoad(pDomain, (LPWSTR)wszFriendlyName);
+    ETW::LoaderLog::DomainLoad((LPWSTR)wszFriendlyName);
 
     if (dwFlags & APPDOMAIN_IGNORE_UNHANDLED_EXCEPTIONS)
         pDomain->SetIgnoreUnhandledExceptions();
@@ -578,33 +591,33 @@ HRESULT CorHost2::CreateAppDomainWithManager(
 
     for (int i = 0; i < nProperties; i++)
     {
-        if (wcscmp(pPropertyNames[i], W("NATIVE_DLL_SEARCH_DIRECTORIES")) == 0)
+        if (u16_strcmp(pPropertyNames[i], _T(HOST_PROPERTY_NATIVE_DLL_SEARCH_DIRECTORIES)) == 0)
         {
             pwzNativeDllSearchDirectories = pPropertyValues[i];
         }
         else
-        if (wcscmp(pPropertyNames[i], W("TRUSTED_PLATFORM_ASSEMBLIES")) == 0)
+        if (u16_strcmp(pPropertyNames[i], _T(HOST_PROPERTY_TRUSTED_PLATFORM_ASSEMBLIES)) == 0)
         {
             pwzTrustedPlatformAssemblies = pPropertyValues[i];
         }
         else
-        if (wcscmp(pPropertyNames[i], W("PLATFORM_RESOURCE_ROOTS")) == 0)
+        if (u16_strcmp(pPropertyNames[i], _T(HOST_PROPERTY_PLATFORM_RESOURCE_ROOTS)) == 0)
         {
             pwzPlatformResourceRoots = pPropertyValues[i];
         }
         else
-        if (wcscmp(pPropertyNames[i], W("APP_PATHS")) == 0)
+        if (u16_strcmp(pPropertyNames[i], _T(HOST_PROPERTY_APP_PATHS)) == 0)
         {
             pwzAppPaths = pPropertyValues[i];
         }
         else
-        if (wcscmp(pPropertyNames[i], W("DEFAULT_STACK_SIZE")) == 0)
+        if (u16_strcmp(pPropertyNames[i], W("DEFAULT_STACK_SIZE")) == 0)
         {
             extern void ParseDefaultStackSize(LPCWSTR value);
             ParseDefaultStackSize(pPropertyValues[i]);
         }
         else
-        if (wcscmp(pPropertyNames[i], W("USE_ENTRYPOINT_FILTER")) == 0)
+        if (u16_strcmp(pPropertyNames[i], W("USE_ENTRYPOINT_FILTER")) == 0)
         {
             extern void ParseUseEntryPointFilter(LPCWSTR value);
             ParseUseEntryPointFilter(pPropertyValues[i]);
@@ -626,9 +639,39 @@ HRESULT CorHost2::CreateAppDomainWithManager(
             sAppPaths));
     }
 
+#if defined(TARGET_UNIX)
+    if (!g_coreclr_embedded)
+    {
+        // Check if the current code is executing in the single file host or in libcoreclr.so. The libSystem.Native is linked
+        // into the single file host, so we need to check only when this code is in libcoreclr.so.
+        // Preload the libSystem.Native.so/dylib to detect possible problems with loading it early
+        EX_TRY
+        {
+            NativeLibrary::LoadLibraryByName(W("libSystem.Native"), SystemDomain::SystemAssembly(), FALSE, 0, TRUE);
+        }
+        EX_HOOK
+        {
+            Exception *ex = GET_EXCEPTION();
+            SString err;
+            ex->GetMessage(err);
+            LogErrorToHost("Error message: %s", err.GetUTF8());
+        }
+        EX_END_HOOK;
+    }
+#endif // TARGET_UNIX
+
     *pAppDomainID=DefaultADID;
 
     m_fAppDomainCreated = TRUE;
+
+#ifdef FEATURE_PERFTRACING
+    // Initialize default event sources
+    {
+        GCX_COOP();
+        MethodDescCallSite initEventSources(METHOD__EVENT_SOURCE__INITIALIZE_DEFAULT_EVENT_SOURCES);
+        initEventSources.Call(NULL);
+    }
+#endif // FEATURE_PERFTRACING
 
     END_EXTERNAL_ENTRYPOINT;
 
@@ -657,9 +700,9 @@ HRESULT CorHost2::CreateDelegate(
     EMPTY_STRING_TO_NULL(wszClassName);
     EMPTY_STRING_TO_NULL(wszMethodName);
 
-    if (fnPtr == NULL)
+    if (fnPtr == 0)
        return E_POINTER;
-    *fnPtr = NULL;
+    *fnPtr = 0;
 
     if(wszAssemblyName == NULL)
         return E_INVALIDARG;

@@ -4,12 +4,11 @@
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Compression;
 using System.Reflection.Internal;
 using System.Reflection.Metadata;
 using System.Runtime.ExceptionServices;
 using System.Threading;
-
-using System.IO.Compression;
 
 namespace System.Reflection.PortableExecutable
 {
@@ -91,7 +90,7 @@ namespace System.Reflection.PortableExecutable
             bool success = false;
             try
             {
-                var compressed = new ReadOnlyUnmanagedMemoryStream(headerReader.CurrentPointer, headerReader.RemainingBytes);
+                var compressed = new UnmanagedMemoryStream(headerReader.CurrentPointer, headerReader.RemainingBytes);
                 using var deflate = new DeflateStream(compressed, CompressionMode.Decompress, leaveOpen: true);
 
                 if (decompressedSize > 0)
@@ -100,7 +99,7 @@ namespace System.Reflection.PortableExecutable
 
                     try
                     {
-#if NETCOREAPP
+#if NET
                         actualLength = deflate.TryReadAll(new Span<byte>(decompressed.Pointer, decompressed.Size));
 #else
                         using var decompressedStream = new UnmanagedMemoryStream(decompressed.Pointer, decompressed.Size, decompressed.Size, FileAccess.Write);

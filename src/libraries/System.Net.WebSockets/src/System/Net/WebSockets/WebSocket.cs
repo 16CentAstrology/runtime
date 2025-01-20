@@ -84,7 +84,7 @@ namespace System.Net.WebSockets
         public static TimeSpan DefaultKeepAliveInterval
         {
             // In the .NET Framework, this pulls the value from a P/Invoke.  Here we just hardcode it to a reasonable default.
-            get { return TimeSpan.FromSeconds(30); }
+            get { return WebSocketDefaults.DefaultClientKeepAliveInterval; }
         }
 
         protected static void ThrowOnInvalidState(WebSocketState state, params WebSocketState[] validStates)
@@ -112,23 +112,14 @@ namespace System.Net.WebSockets
 
         public static ArraySegment<byte> CreateClientBuffer(int receiveBufferSize, int sendBufferSize)
         {
-            if (receiveBufferSize <= 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(receiveBufferSize), receiveBufferSize, SR.Format(SR.net_WebSockets_ArgumentOutOfRange_TooSmall, 1));
-            }
-            if (sendBufferSize <= 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(sendBufferSize), sendBufferSize, SR.Format(SR.net_WebSockets_ArgumentOutOfRange_TooSmall, 1));
-            }
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(receiveBufferSize);
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(sendBufferSize);
             return new ArraySegment<byte>(new byte[Math.Max(receiveBufferSize, sendBufferSize)]);
         }
 
         public static ArraySegment<byte> CreateServerBuffer(int receiveBufferSize)
         {
-            if (receiveBufferSize <= 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(receiveBufferSize), receiveBufferSize, SR.Format(SR.net_WebSockets_ArgumentOutOfRange_TooSmall, 1));
-            }
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(receiveBufferSize);
             return new ArraySegment<byte>(new byte[receiveBufferSize]);
         }
 
@@ -159,7 +150,7 @@ namespace System.Net.WebSockets
                     0));
             }
 
-            return new ManagedWebSocket(stream, isServer, subProtocol, keepAliveInterval);
+            return new ManagedWebSocket(stream, isServer, subProtocol, keepAliveInterval, WebSocketDefaults.DefaultKeepAliveTimeout);
         }
 
         /// <summary>Creates a <see cref="WebSocket"/> that operates on a <see cref="Stream"/> representing a web socket connection.</summary>
@@ -213,17 +204,12 @@ namespace System.Net.WebSockets
                     0));
             }
 
-            if (receiveBufferSize <= 0 || sendBufferSize <= 0)
-            {
-                throw new ArgumentOutOfRangeException(
-                    receiveBufferSize <= 0 ? nameof(receiveBufferSize) : nameof(sendBufferSize),
-                    receiveBufferSize <= 0 ? receiveBufferSize : sendBufferSize,
-                    SR.Format(SR.net_WebSockets_ArgumentOutOfRange_TooSmall, 0));
-            }
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(receiveBufferSize);
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(sendBufferSize);
 
             // Ignore useZeroMaskingKey. ManagedWebSocket doesn't currently support that debugging option.
             // Ignore internalBuffer. ManagedWebSocket uses its own small buffer for headers/control messages.
-            return new ManagedWebSocket(innerStream, false, subProtocol, keepAliveInterval);
+            return new ManagedWebSocket(innerStream, false, subProtocol, keepAliveInterval, WebSocketDefaults.DefaultKeepAliveTimeout);
         }
     }
 }

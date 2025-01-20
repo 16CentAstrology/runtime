@@ -1057,9 +1057,9 @@ namespace SerializationTestTypes
         {
             get
             {
-                FieldInfo field = MemberInfo as FieldInfo;
-                if (field != null)
-                    return field.FieldType;
+                FieldInfo fieldInfo = MemberInfo as FieldInfo;
+                if (fieldInfo != null)
+                    return fieldInfo.FieldType;
                 return ((PropertyInfo)MemberInfo).PropertyType;
             }
         }
@@ -1393,7 +1393,7 @@ namespace SerializationTestTypes
                             throw new Exception("TooManyDataMembers :" + field.DeclaringType.FullName + " :: " + field.Name);
                         DataMemberAttribute memberAttribute = (DataMemberAttribute)memberAttributes[0];
                         DataMember memberContract = new DataMember(field);
-                        if (memberAttribute.Name == null || memberAttribute.Name.Length == 0)
+                        if (string.IsNullOrEmpty(memberAttribute.Name))
                             memberContract.Name = field.Name;
                         else
                             memberContract.Name = memberAttribute.Name;

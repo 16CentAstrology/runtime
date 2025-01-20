@@ -11,16 +11,17 @@ namespace Microsoft.Interop.JavaScript
 {
     internal sealed class TaskJSGenerator : BaseJSGenerator
     {
-        private MarshalerType _resultMarshalerType;
-        public TaskJSGenerator(MarshalerType resultMarshalerType)
-            : base(MarshalerType.Task, new Forwarder())
+        private readonly MarshalerType _resultMarshalerType;
+
+        public TaskJSGenerator(TypePositionInfo info, StubCodeContext context, MarshalerType resultMarshalerType)
+            : base(MarshalerType.Task, new Forwarder().Bind(info, context))
         {
             _resultMarshalerType = resultMarshalerType;
         }
 
-        public override IEnumerable<ExpressionSyntax> GenerateBind(TypePositionInfo info, StubCodeContext context)
+        public override IEnumerable<ExpressionSyntax> GenerateBind()
         {
-            var jsty = (JSTaskTypeInfo)((JSMarshallingInfo)info.MarshallingAttributeInfo).TypeInfo;
+            var jsty = (JSTaskTypeInfo)((JSMarshallingInfo)TypeInfo.MarshallingAttributeInfo).TypeInfo;
             if (jsty.ResultTypeInfo is JSSimpleTypeInfo(KnownManagedType.Void))
             {
                 yield return InvocationExpression(MarshalerTypeName(MarshalerType.Task), ArgumentList());
@@ -32,46 +33,46 @@ namespace Microsoft.Interop.JavaScript
             }
         }
 
-        public override IEnumerable<StatementSyntax> Generate(TypePositionInfo info, StubCodeContext context)
+        public override IEnumerable<StatementSyntax> Generate(StubIdentifierContext context)
         {
-            var jsty = (JSTaskTypeInfo)((JSMarshallingInfo)info.MarshallingAttributeInfo).TypeInfo;
+            var jsty = (JSTaskTypeInfo)((JSMarshallingInfo)TypeInfo.MarshallingAttributeInfo).TypeInfo;
 
-            string argName = context.GetAdditionalIdentifier(info, "js_arg");
-            var target = info.IsManagedReturnPosition
+            string argName = context.GetAdditionalIdentifier(TypeInfo, "js_arg");
+            var target = TypeInfo.IsManagedReturnPosition
                 ? Constants.ArgumentReturn
                 : argName;
 
-            var source = info.IsManagedReturnPosition
-                ? Argument(IdentifierName(context.GetIdentifiers(info).native))
-                : _inner.AsArgument(info, context);
+            var source = TypeInfo.IsManagedReturnPosition
+                ? Argument(IdentifierName(context.GetIdentifiers(TypeInfo).native))
+                : _inner.AsArgument(context);
 
-            if (context.CurrentStage == StubCodeContext.Stage.UnmarshalCapture && context.Direction == MarshalDirection.ManagedToUnmanaged && info.IsManagedReturnPosition)
+            if (context.CurrentStage == StubIdentifierContext.Stage.UnmarshalCapture && CodeContext.Direction == MarshalDirection.ManagedToUnmanaged && TypeInfo.IsManagedReturnPosition)
             {
                 yield return jsty.ResultTypeInfo is JSSimpleTypeInfo(KnownManagedType.Void)
                     ? ToManagedMethodVoid(target, source)
                     : ToManagedMethod(target, source, jsty.ResultTypeInfo.Syntax);
             }
 
-            if (context.CurrentStage == StubCodeContext.Stage.Marshal && context.Direction == MarshalDirection.UnmanagedToManaged && info.IsManagedReturnPosition)
+            if (context.CurrentStage == StubIdentifierContext.Stage.Marshal && CodeContext.Direction == MarshalDirection.UnmanagedToManaged && TypeInfo.IsManagedReturnPosition)
             {
                 yield return jsty.ResultTypeInfo is JSSimpleTypeInfo(KnownManagedType.Void)
                     ? ToJSMethodVoid(target, source)
                     : ToJSMethod(target, source, jsty.ResultTypeInfo.Syntax);
             }
 
-            foreach (var x in base.Generate(info, context))
+            foreach (var x in base.Generate(context))
             {
                 yield return x;
             }
 
-            if (context.CurrentStage == StubCodeContext.Stage.PinnedMarshal && context.Direction == MarshalDirection.ManagedToUnmanaged && !info.IsManagedReturnPosition)
+            if (context.CurrentStage == StubIdentifierContext.Stage.PinnedMarshal && CodeContext.Direction == MarshalDirection.ManagedToUnmanaged && !TypeInfo.IsManagedReturnPosition)
             {
                 yield return jsty.ResultTypeInfo is JSSimpleTypeInfo(KnownManagedType.Void)
                     ? ToJSMethodVoid(target, source)
                     : ToJSMethod(target, source, jsty.ResultTypeInfo.Syntax);
             }
 
-            if (context.CurrentStage == StubCodeContext.Stage.Unmarshal && context.Direction == MarshalDirection.UnmanagedToManaged && !info.IsManagedReturnPosition)
+            if (context.CurrentStage == StubIdentifierContext.Stage.Unmarshal && CodeContext.Direction == MarshalDirection.UnmanagedToManaged && !TypeInfo.IsManagedReturnPosition)
             {
                 yield return jsty.ResultTypeInfo is JSSimpleTypeInfo(KnownManagedType.Void)
                     ? ToManagedMethodVoid(target, source)
@@ -79,21 +80,21 @@ namespace Microsoft.Interop.JavaScript
             }
         }
 
-        private StatementSyntax ToManagedMethodVoid(string target, ArgumentSyntax source)
+        private ExpressionStatementSyntax ToManagedMethodVoid(string target, ArgumentSyntax source)
         {
             return ExpressionStatement(InvocationExpression(MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression,
                     IdentifierName(target), GetToManagedMethod(Type)))
                     .WithArgumentList(ArgumentList(SingletonSeparatedList(source.WithRefOrOutKeyword(Token(SyntaxKind.OutKeyword))))));
         }
 
-        private StatementSyntax ToJSMethodVoid(string target, ArgumentSyntax source)
+        private ExpressionStatementSyntax ToJSMethodVoid(string target, ArgumentSyntax source)
         {
             return ExpressionStatement(InvocationExpression(MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression,
                     IdentifierName(target), GetToJSMethod(Type)))
                     .WithArgumentList(ArgumentList(SingletonSeparatedList(source))));
         }
 
-        private StatementSyntax ToManagedMethod(string target, ArgumentSyntax source, TypeSyntax sourceType)
+        private ExpressionStatementSyntax ToManagedMethod(string target, ArgumentSyntax source, TypeSyntax sourceType)
         {
             return ExpressionStatement(InvocationExpression(MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression,
                     IdentifierName(target), GetToManagedMethod(Type)))
@@ -116,7 +117,7 @@ namespace Microsoft.Interop.JavaScript
                         }))))))))}))));
         }
 
-        private StatementSyntax ToJSMethod(string target, ArgumentSyntax source, TypeSyntax sourceType)
+        private ExpressionStatementSyntax ToJSMethod(string target, ArgumentSyntax source, TypeSyntax sourceType)
         {
             return ExpressionStatement(InvocationExpression(MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression,
                     IdentifierName(target), GetToJSMethod(Type)))

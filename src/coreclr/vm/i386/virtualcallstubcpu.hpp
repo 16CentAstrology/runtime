@@ -690,8 +690,10 @@ StubCallSite::StubCallSite(TADDR siteAddrForRegisterIndirect, PCODE returnAddr)
     }
 }
 
+#ifndef UNIX_X86_ABI
 // the special return address for VSD tailcalls
 extern "C" void STDCALL JIT_TailCallReturnFromVSD();
+#endif // UNIX_X86_ABI
 
 PCODE StubCallSite::GetCallerAddress()
 {
@@ -1028,68 +1030,6 @@ void VTableCallHolder::Initialize(unsigned slot)
 }
 
 #endif // DACCESS_COMPILE
-
-VirtualCallStubManager::StubKind VirtualCallStubManager::predictStubKind(PCODE stubStartAddress)
-{
-    SUPPORTS_DAC;
-#ifdef DACCESS_COMPILE
-
-    return SK_BREAKPOINT;  // Dac always uses the slower lookup
-
-#else
-
-    StubKind stubKind = SK_UNKNOWN;
-
-    EX_TRY
-    {
-        // If stubStartAddress is completely bogus, then this might AV,
-        // so we protect it with SEH. An AV here is OK.
-        AVInRuntimeImplOkayHolder AVOkay;
-
-        WORD firstWord = *((WORD*) stubStartAddress);
-
-#ifndef STUB_LOGGING
-        if (firstWord == 0x3981)
-#else //STUB_LOGGING
-        if (firstWord == 0x05ff)
-#endif
-        {
-            stubKind = SK_DISPATCH;
-        }
-        else if (firstWord == 0x6850)
-        {
-            stubKind = SK_LOOKUP;
-        }
-        else if (firstWord == 0x8b50)
-        {
-            stubKind = SK_RESOLVE;
-        }
-        else if (firstWord == 0x018b)
-        {
-            stubKind = SK_VTABLECALL;
-        }
-        else
-        {
-            BYTE firstByte  = ((BYTE*) stubStartAddress)[0];
-            BYTE secondByte = ((BYTE*) stubStartAddress)[1];
-
-            if ((firstByte  == X86_INSTR_INT3) ||
-                (secondByte == X86_INSTR_INT3))
-            {
-                stubKind = SK_BREAKPOINT;
-            }
-        }
-    }
-    EX_CATCH
-    {
-        stubKind = SK_UNKNOWN;
-    }
-    EX_END_CATCH(SwallowAllExceptions);
-
-    return stubKind;
-
-#endif // DACCESS_COMPILE
-}
 
 #endif //DECLARE_DATA
 

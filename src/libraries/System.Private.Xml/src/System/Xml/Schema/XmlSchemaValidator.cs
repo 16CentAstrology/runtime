@@ -4,15 +4,15 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Text;
-using System.IO;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
+using System.IO;
+using System.Runtime.Versioning;
+using System.Text;
+using System.Threading;
 using System.Xml;
 using System.Xml.Schema;
 using System.Xml.XPath;
-using System.Threading;
-using System.Runtime.Versioning;
-using System.Diagnostics.CodeAnalysis;
 
 namespace System.Xml.Schema
 {
@@ -950,7 +950,7 @@ namespace System.Xml.Schema
                         ContentValidator.AddParticleToExpected(element!, _schemaSet, expected, true);
                     }
 
-                    return (expected.ToArray(typeof(XmlSchemaParticle)) as XmlSchemaParticle[])!;
+                    return ToArray(expected);
                 }
             }
             if (_context.ElementDecl != null)
@@ -958,11 +958,17 @@ namespace System.Xml.Schema
                 ArrayList? expected = _context.ElementDecl.ContentValidator!.ExpectedParticles(_context, false, _schemaSet);
                 if (expected != null)
                 {
-                    return (expected.ToArray(typeof(XmlSchemaParticle)) as XmlSchemaParticle[])!;
+                    return ToArray(expected);
                 }
             }
 
             return Array.Empty<XmlSchemaParticle>();
+
+            [UnconditionalSuppressMessage("AotAnalysis", "IL3050", Justification = "ToArray is called for known reference types only.")]
+            static XmlSchemaParticle[] ToArray(ArrayList expected)
+            {
+                return (expected.ToArray(typeof(XmlSchemaParticle)) as XmlSchemaParticle[])!;
+            }
         }
 
         public XmlSchemaAttribute[] GetExpectedAttributes()
@@ -986,7 +992,7 @@ namespace System.Xml.Schema
                     AddXsiAttributes(attList);
                 }
 
-                return (attList.ToArray(typeof(XmlSchemaAttribute)) as XmlSchemaAttribute[])!;
+                return ToArray(attList);
             }
             else if (_currentState == ValidatorState.Start)
             {
@@ -1000,6 +1006,12 @@ namespace System.Xml.Schema
                 }
             }
             return Array.Empty<XmlSchemaAttribute>();
+
+            [UnconditionalSuppressMessage("AotAnalysis", "IL3050", Justification = "ToArray is called for known reference types only.")]
+            static XmlSchemaAttribute[] ToArray(ArrayList attList)
+            {
+                return (attList.ToArray(typeof(XmlSchemaAttribute)) as XmlSchemaAttribute[])!;
+            }
         }
 
         internal void GetUnspecifiedDefaultAttributes(ArrayList defaultAttributes, bool createNodeData)
@@ -1025,7 +1037,7 @@ namespace System.Xml.Schema
                         if (attributeNS.Length > 0)
                         {
                             defaultPrefix = GetDefaultAttributePrefix(attributeNS);
-                            if (defaultPrefix == null || defaultPrefix.Length == 0)
+                            if (string.IsNullOrEmpty(defaultPrefix))
                             {
                                 SendValidationEvent(SR.Sch_DefaultAttributeNotApplied, new string[2] { attdef.Name.ToString(), QNameString(_context.LocalName!, _context.Namespace!) });
                                 continue;
@@ -2596,7 +2608,7 @@ namespace System.Xml.Schema
         {
             if (getParticles)
             {
-                string ContinuationString = SR.Format(SR.Sch_ContinuationString, new string[] { " " });
+                string ContinuationString = SR.Format(SR.Sch_ContinuationString, " ");
                 XmlSchemaParticle? currentParticle;
                 XmlSchemaParticle? nextParticle = null;
                 XmlQualifiedName currentQName;

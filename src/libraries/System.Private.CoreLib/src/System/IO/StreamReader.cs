@@ -111,12 +111,12 @@ namespace System.IO
         {
         }
 
-        public StreamReader(Stream stream, Encoding encoding)
+        public StreamReader(Stream stream, Encoding? encoding)
             : this(stream, encoding, true, DefaultBufferSize, false)
         {
         }
 
-        public StreamReader(Stream stream, Encoding encoding, bool detectEncodingFromByteOrderMarks)
+        public StreamReader(Stream stream, Encoding? encoding, bool detectEncodingFromByteOrderMarks)
             : this(stream, encoding, detectEncodingFromByteOrderMarks, DefaultBufferSize, false)
         {
         }
@@ -131,7 +131,7 @@ namespace System.IO
         // unicode, and big endian unicode text, but that's it.  If neither
         // of those three match, it will use the Encoding you provided.
         //
-        public StreamReader(Stream stream, Encoding encoding, bool detectEncodingFromByteOrderMarks, int bufferSize)
+        public StreamReader(Stream stream, Encoding? encoding, bool detectEncodingFromByteOrderMarks, int bufferSize)
             : this(stream, encoding, detectEncodingFromByteOrderMarks, bufferSize, false)
         {
         }
@@ -152,10 +152,7 @@ namespace System.IO
             {
                 bufferSize = DefaultBufferSize;
             }
-            else if (bufferSize <= 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(bufferSize), SR.ArgumentOutOfRange_NeedPosNum);
-            }
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(bufferSize);
 
             _stream = stream;
             _encoding = encoding ??= Encoding.UTF8;
@@ -190,18 +187,18 @@ namespace System.IO
         {
         }
 
-        public StreamReader(string path, Encoding encoding)
+        public StreamReader(string path, Encoding? encoding)
             : this(path, encoding, true, DefaultBufferSize)
         {
         }
 
-        public StreamReader(string path, Encoding encoding, bool detectEncodingFromByteOrderMarks)
+        public StreamReader(string path, Encoding? encoding, bool detectEncodingFromByteOrderMarks)
             : this(path, encoding, detectEncodingFromByteOrderMarks, DefaultBufferSize)
         {
         }
 
-        public StreamReader(string path, Encoding encoding, bool detectEncodingFromByteOrderMarks, int bufferSize)
-            : this(ValidateArgsAndOpenPath(path, encoding, bufferSize), encoding, detectEncodingFromByteOrderMarks, bufferSize, leaveOpen: false)
+        public StreamReader(string path, Encoding? encoding, bool detectEncodingFromByteOrderMarks, int bufferSize)
+            : this(ValidateArgsAndOpenPath(path, bufferSize), encoding, detectEncodingFromByteOrderMarks, bufferSize, leaveOpen: false)
         {
         }
 
@@ -210,15 +207,14 @@ namespace System.IO
         {
         }
 
-        public StreamReader(string path, Encoding encoding, bool detectEncodingFromByteOrderMarks, FileStreamOptions options)
-            : this(ValidateArgsAndOpenPath(path, encoding, options), encoding, detectEncodingFromByteOrderMarks, DefaultBufferSize)
+        public StreamReader(string path, Encoding? encoding, bool detectEncodingFromByteOrderMarks, FileStreamOptions options)
+            : this(ValidateArgsAndOpenPath(path, options), encoding, detectEncodingFromByteOrderMarks, DefaultBufferSize)
         {
         }
 
-        private static Stream ValidateArgsAndOpenPath(string path, Encoding encoding, FileStreamOptions options)
+        private static FileStream ValidateArgsAndOpenPath(string path, FileStreamOptions options)
         {
             ArgumentException.ThrowIfNullOrEmpty(path);
-            ArgumentNullException.ThrowIfNull(encoding);
             ArgumentNullException.ThrowIfNull(options);
             if ((options.Access & FileAccess.Read) == 0)
             {
@@ -228,14 +224,10 @@ namespace System.IO
             return new FileStream(path, options);
         }
 
-        private static Stream ValidateArgsAndOpenPath(string path, Encoding encoding, int bufferSize)
+        private static FileStream ValidateArgsAndOpenPath(string path, int bufferSize)
         {
             ArgumentException.ThrowIfNullOrEmpty(path);
-            ArgumentNullException.ThrowIfNull(encoding);
-            if (bufferSize <= 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(bufferSize), SR.ArgumentOutOfRange_NeedPosNum);
-            }
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(bufferSize);
 
             return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, DefaultFileStreamBufferSize);
         }
@@ -326,7 +318,7 @@ namespace System.IO
 
             if (_charPos == _charLen)
             {
-                if (_isBlocked || ReadBuffer() == 0)
+                if (ReadBuffer() == 0)
                 {
                     return -1;
                 }
@@ -355,10 +347,8 @@ namespace System.IO
         {
             ArgumentNullException.ThrowIfNull(buffer);
 
-            if (index < 0 || count < 0)
-            {
-                throw new ArgumentOutOfRangeException(index < 0 ? nameof(index) : nameof(count), SR.ArgumentOutOfRange_NeedNonNegNum);
-            }
+            ArgumentOutOfRangeException.ThrowIfNegative(index);
+            ArgumentOutOfRangeException.ThrowIfNegative(count);
             if (buffer.Length - index < count)
             {
                 throw new ArgumentException(SR.Argument_InvalidOffLen);
@@ -436,10 +426,8 @@ namespace System.IO
         {
             ArgumentNullException.ThrowIfNull(buffer);
 
-            if (index < 0 || count < 0)
-            {
-                throw new ArgumentOutOfRangeException(index < 0 ? nameof(index) : nameof(count), SR.ArgumentOutOfRange_NeedNonNegNum);
-            }
+            ArgumentOutOfRangeException.ThrowIfNegative(index);
+            ArgumentOutOfRangeException.ThrowIfNegative(count);
             if (buffer.Length - index < count)
             {
                 throw new ArgumentException(SR.Argument_InvalidOffLen);
@@ -1060,10 +1048,8 @@ namespace System.IO
         {
             ArgumentNullException.ThrowIfNull(buffer);
 
-            if (index < 0 || count < 0)
-            {
-                throw new ArgumentOutOfRangeException(index < 0 ? nameof(index) : nameof(count), SR.ArgumentOutOfRange_NeedNonNegNum);
-            }
+            ArgumentOutOfRangeException.ThrowIfNegative(index);
+            ArgumentOutOfRangeException.ThrowIfNegative(count);
             if (buffer.Length - index < count)
             {
                 throw new ArgumentException(SR.Argument_InvalidOffLen);
@@ -1273,10 +1259,8 @@ namespace System.IO
         {
             ArgumentNullException.ThrowIfNull(buffer);
 
-            if (index < 0 || count < 0)
-            {
-                throw new ArgumentOutOfRangeException(index < 0 ? nameof(index) : nameof(count), SR.ArgumentOutOfRange_NeedNonNegNum);
-            }
+            ArgumentOutOfRangeException.ThrowIfNegative(index);
+            ArgumentOutOfRangeException.ThrowIfNegative(count);
             if (buffer.Length - index < count)
             {
                 throw new ArgumentException(SR.Argument_InvalidOffLen);

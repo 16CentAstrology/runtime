@@ -1,8 +1,8 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System.Diagnostics;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO;
@@ -696,9 +696,8 @@ namespace System.Text
             ArgumentNullException.ThrowIfNull(chars);
             ArgumentNullException.ThrowIfNull(bytes);
 
-            if (charCount < 0 || byteCount < 0)
-                throw new ArgumentOutOfRangeException(charCount < 0 ? nameof(charCount) : nameof(byteCount),
-                    SR.ArgumentOutOfRange_NeedNonNegNum);
+            ArgumentOutOfRangeException.ThrowIfNegative(charCount);
+            ArgumentOutOfRangeException.ThrowIfNegative(byteCount);
 
             // Get the char array to convert
             char[] arrChar = new ReadOnlySpan<char>(chars, charCount).ToArray();
@@ -734,6 +733,24 @@ namespace System.Text
             }
         }
 
+        /// <summary>Encodes into a span of bytes a set of characters from the specified read-only span if the destination is large enough.</summary>
+        /// <param name="chars">The span containing the set of characters to encode.</param>
+        /// <param name="bytes">The byte span to hold the encoded bytes.</param>
+        /// <param name="bytesWritten">Upon successful completion of the operation, the number of bytes encoded into <paramref name="bytes"/>.</param>
+        /// <returns><see langword="true"/> if all of the characters were encoded into the destination; <see langword="false"/> if the destination was too small to contain all the encoded bytes.</returns>
+        public virtual bool TryGetBytes(ReadOnlySpan<char> chars, Span<byte> bytes, out int bytesWritten)
+        {
+            int required = GetByteCount(chars);
+            if (required <= bytes.Length)
+            {
+                bytesWritten = GetBytes(chars, bytes);
+                return true;
+            }
+
+            bytesWritten = 0;
+            return false;
+        }
+
         // Returns the number of characters produced by decoding the given byte
         // array.
         //
@@ -756,9 +773,7 @@ namespace System.Text
         {
             ArgumentNullException.ThrowIfNull(bytes);
 
-            if (count < 0)
-                throw new ArgumentOutOfRangeException(nameof(count),
-                      SR.ArgumentOutOfRange_NeedNonNegNum);
+            ArgumentOutOfRangeException.ThrowIfNegative(count);
 
             byte[] arrByte = new ReadOnlySpan<byte>(bytes, count).ToArray();
 
@@ -830,9 +845,8 @@ namespace System.Text
             ArgumentNullException.ThrowIfNull(bytes);
             ArgumentNullException.ThrowIfNull(chars);
 
-            if (byteCount < 0 || charCount < 0)
-                throw new ArgumentOutOfRangeException(byteCount < 0 ? nameof(byteCount) : nameof(charCount),
-                    SR.ArgumentOutOfRange_NeedNonNegNum);
+            ArgumentOutOfRangeException.ThrowIfNegative(byteCount);
+            ArgumentOutOfRangeException.ThrowIfNegative(charCount);
 
             // Get the byte array to convert
             byte[] arrByte = new ReadOnlySpan<byte>(bytes, byteCount).ToArray();
@@ -868,13 +882,30 @@ namespace System.Text
             }
         }
 
+        /// <summary>Decodes into a span of chars a set of bytes from the specified read-only span if the destination is large enough.</summary>
+        /// <param name="bytes">A read-only span containing the sequence of bytes to decode.</param>
+        /// <param name="chars">The character span receiving the decoded bytes.</param>
+        /// <param name="charsWritten">Upon successful completion of the operation, the number of chars decoded into <paramref name="chars"/>.</param>
+        /// <returns><see langword="true"/> if all of the characters were decoded into the destination; <see langword="false"/> if the destination was too small to contain all the decoded chars.</returns>
+        public virtual bool TryGetChars(ReadOnlySpan<byte> bytes, Span<char> chars, out int charsWritten)
+        {
+            int required = GetCharCount(bytes);
+            if (required <= chars.Length)
+            {
+                charsWritten = GetChars(bytes, chars);
+                return true;
+            }
+
+            charsWritten = 0;
+            return false;
+        }
+
         [CLSCompliant(false)]
         public unsafe string GetString(byte* bytes, int byteCount)
         {
             ArgumentNullException.ThrowIfNull(bytes);
 
-            if (byteCount < 0)
-                throw new ArgumentOutOfRangeException(nameof(byteCount), SR.ArgumentOutOfRange_NeedNonNegNum);
+            ArgumentOutOfRangeException.ThrowIfNegative(byteCount);
 
             return string.CreateStringFromEncoding(bytes, byteCount, this);
         }
@@ -1111,7 +1142,7 @@ namespace System.Text
             decoder!.ClearMustFlush();
         }
 
-        internal sealed class DefaultEncoder : Encoder, IObjectReference
+        internal sealed class DefaultEncoder : Encoder
         {
             private readonly Encoding _encoding;
 
@@ -1119,9 +1150,6 @@ namespace System.Text
             {
                 _encoding = encoding;
             }
-
-            public object GetRealObject(StreamingContext context) =>
-                throw new PlatformNotSupportedException();
 
             // Returns the number of bytes the next call to GetBytes will
             // produce if presented with the given range of characters and the given
@@ -1166,7 +1194,7 @@ namespace System.Text
                 _encoding.GetBytes(chars, charCount, bytes, byteCount);
         }
 
-        internal sealed class DefaultDecoder : Decoder, IObjectReference
+        internal sealed class DefaultDecoder : Decoder
         {
             private readonly Encoding _encoding;
 
@@ -1174,9 +1202,6 @@ namespace System.Text
             {
                 _encoding = encoding;
             }
-
-            public object GetRealObject(StreamingContext context) =>
-                throw new PlatformNotSupportedException();
 
             // Returns the number of characters the next call to GetChars will
             // produce if presented with the given range of bytes. The returned value
@@ -1272,7 +1297,7 @@ namespace System.Text
                     {
                         // Throw maybe
                         _bytes -= numBytes;                                        // Didn't encode these bytes
-                        _enc.ThrowCharsOverflow(_decoder, _bytes <= _byteStart);    // Throw?
+                        _enc.ThrowCharsOverflow(_decoder, _chars == _charStart);    // Throw?
                         return false;                                           // No throw, but no store either
                     }
 
@@ -1291,7 +1316,7 @@ namespace System.Text
                 {
                     // Throw maybe
                     _bytes -= numBytes;                                        // Didn't encode these bytes
-                    _enc.ThrowCharsOverflow(_decoder, _bytes <= _byteStart);    // Throw?
+                    _enc.ThrowCharsOverflow(_decoder, _chars == _charStart);    // Throw?
                     return false;                                           // No throw, but no store either
                 }
                 return AddChar(ch1, numBytes) && AddChar(ch2, numBytes);
@@ -1322,7 +1347,7 @@ namespace System.Text
             internal bool Fallback(byte fallbackByte)
             {
                 // Build our buffer
-                byte[] byteBuffer = new byte[] { fallbackByte };
+                byte[] byteBuffer = [fallbackByte];
 
                 // Do the fallback and add the data.
                 return Fallback(byteBuffer);
@@ -1331,7 +1356,7 @@ namespace System.Text
             internal bool Fallback(byte byte1, byte byte2)
             {
                 // Build our buffer
-                byte[] byteBuffer = new byte[] { byte1, byte2 };
+                byte[] byteBuffer = [byte1, byte2];
 
                 // Do the fallback and add the data.
                 return Fallback(byteBuffer);
@@ -1340,7 +1365,7 @@ namespace System.Text
             internal bool Fallback(byte byte1, byte byte2, byte byte3, byte byte4)
             {
                 // Build our buffer
-                byte[] byteBuffer = new byte[] { byte1, byte2, byte3, byte4 };
+                byte[] byteBuffer = [byte1, byte2, byte3, byte4];
 
                 // Do the fallback and add the data.
                 return Fallback(byteBuffer);

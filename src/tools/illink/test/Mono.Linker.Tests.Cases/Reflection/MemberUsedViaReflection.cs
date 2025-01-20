@@ -70,7 +70,7 @@ namespace Mono.Linker.Tests.Cases.Reflection
 		[Kept]
 		static void TestWithUnknownBindingFlags (BindingFlags bindingFlags)
 		{
-			// Since the binding flags are not known linker should mark all members on the type
+			// Since the binding flags are not known trimming tools should mark all members on the type
 			var members = typeof (UnknownBindingFlags).GetMember ("PrefixLookup*", bindingFlags);
 		}
 
@@ -139,14 +139,14 @@ namespace Mono.Linker.Tests.Cases.Reflection
 		private class SimpleType
 		{
 			[Kept]
-			public static int field;
+			public static int fieldKept;
 
 			[Kept]
 			public int memberKept {
 				[Kept]
-				get { return field; }
+				get { return fieldKept; }
 				[Kept]
-				set { field = value; }
+				set { fieldKept = value; }
 			}
 
 			[Kept]

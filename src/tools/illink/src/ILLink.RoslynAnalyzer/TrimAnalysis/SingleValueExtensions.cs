@@ -19,9 +19,9 @@ namespace ILLink.RoslynAnalyzer.TrimAnalysis
 					TypeKind.TypeParameter =>
 						new NullableValueWithDynamicallyAccessedMembers (new TypeProxy (type),
 							new GenericParameterValue ((ITypeParameterSymbol) underlyingType)),
-					// typeof(Nullable<>) 
+					// typeof(Nullable<>)
 					TypeKind.Error => new SystemTypeValue (new TypeProxy (type)),
-					TypeKind.Class or TypeKind.Struct or TypeKind.Interface =>
+					TypeKind.Class or TypeKind.Enum or TypeKind.Interface or TypeKind.Struct =>
 						new NullableSystemTypeValue (new TypeProxy (type), new SystemTypeValue (new TypeProxy (underlyingType))),
 					_ => UnknownValue.Instance
 				};

@@ -266,6 +266,8 @@ namespace PInvokeTests
         [DllImport("PInvokeNative", CallingConvention = CallingConvention.StdCall)]
         internal static extern IntPtr GetFunctionPointer();
 
+        [DllImport("PInvokeNative", CallingConvention = CallingConvention.StdCall)]
+        internal static extern IntPtr GetNativeFuncFunctionPointer();
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
         internal unsafe struct InlineString
@@ -344,6 +346,7 @@ namespace PInvokeTests
             TestForwardDelegateWithUnmanagedCallersOnly();
             TestDecimal();
             TestDifferentModopts();
+            TestFunctionPointers();
 
             return 100;
         }
@@ -400,6 +403,12 @@ namespace PInvokeTests
                 arr[i] = i;
 
             ThrowIfNotEquals(0, CheckIncremental(arr, ArraySize), "Array marshalling failed");
+
+            int[] empty = new int[0];
+            ThrowIfNotEquals(0, CheckIncremental(empty, 0), "Empty array marshalling failed");
+
+            int[] nullArray = null;
+            ThrowIfNotEquals(1, CheckIncremental(nullArray, 0), "Null array marshalling failed");
 
             Console.WriteLine("Testing marshalling blittable struct arrays");
 
@@ -677,6 +686,15 @@ namespace PInvokeTests
                 Marshal.GetDelegateForFunctionPointer<SetLastErrorFuncDelegate>(procAddress);
             funcDelegate(0x204);
             ThrowIfNotEquals(0x204, Marshal.GetLastWin32Error(), "Not match");
+		}
+		
+		private static unsafe void TestFunctionPointers()
+		{
+            IntPtr procAddress = GetNativeFuncFunctionPointer();
+            delegate* unmanaged[Cdecl] <int, int> unmanagedFuncDelegate =
+                (delegate* unmanaged[Cdecl] <int, int>)procAddress;
+            var result = unmanagedFuncDelegate(100);
+            ThrowIfNotEquals(1422, result, "Function pointer did not set expected error code");
         }
 
         static int Sum(int a, int b, int c, int d, int e, int f, int g, int h, int i, int j)
@@ -1125,7 +1143,7 @@ namespace PInvokeTests
             Action a = Marshal.GetDelegateForFunctionPointer<Action>((IntPtr)(void*)(delegate* unmanaged<void>)&UnmanagedCallback);
             a();
         }
-        
+
         public static unsafe void TestDifferentModopts()
         {
             byte storage;

@@ -13,9 +13,7 @@ namespace System.Diagnostics.Tracing
     /// the counter value.
     /// </summary>
 #if !ES_BUILD_STANDALONE
-#if !FEATURE_WASM_PERFTRACING
-    [System.Runtime.Versioning.UnsupportedOSPlatform("browser")]
-#endif
+    [UnsupportedOSPlatform("browser")]
 #endif
     public partial class IncrementingEventCounter : DiagnosticCounter
     {

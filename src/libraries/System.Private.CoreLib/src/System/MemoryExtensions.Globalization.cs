@@ -191,13 +191,13 @@ namespace System
         /// <param name="source">The source span.</param>
         /// <param name="destination">The destination span which contains the transformed characters.</param>
         /// <param name="culture">An object that supplies culture-specific casing rules.</param>
-        /// <remarks>If <paramref name="culture"/> is null, <see cref="System.Globalization.CultureInfo.CurrentCulture"/> will be used.</remarks>
+        /// <remarks>If <paramref name="culture"/> is null, <see cref="CultureInfo.CurrentCulture"/> will be used.</remarks>
         /// <returns>The number of characters written into the destination span. If the destination is too small, returns -1.</returns>
         /// <exception cref="InvalidOperationException">The source and destination buffers overlap.</exception>
         public static int ToLower(this ReadOnlySpan<char> source, Span<char> destination, CultureInfo? culture)
         {
             if (source.Overlaps(destination))
-                throw new InvalidOperationException(SR.InvalidOperation_SpanOverlappedOperation);
+                ThrowHelper.ThrowInvalidOperationException(ExceptionResource.InvalidOperation_SpanOverlappedOperation);
 
             culture ??= CultureInfo.CurrentCulture;
 
@@ -223,7 +223,7 @@ namespace System
         public static int ToLowerInvariant(this ReadOnlySpan<char> source, Span<char> destination)
         {
             if (source.Overlaps(destination))
-                throw new InvalidOperationException(SR.InvalidOperation_SpanOverlappedOperation);
+                ThrowHelper.ThrowInvalidOperationException(ExceptionResource.InvalidOperation_SpanOverlappedOperation);
 
             // Assuming that changing case does not affect length
             if (destination.Length < source.Length)
@@ -243,13 +243,13 @@ namespace System
         /// <param name="source">The source span.</param>
         /// <param name="destination">The destination span which contains the transformed characters.</param>
         /// <param name="culture">An object that supplies culture-specific casing rules.</param>
-        /// <remarks>If <paramref name="culture"/> is null, <see cref="System.Globalization.CultureInfo.CurrentCulture"/> will be used.</remarks>
+        /// <remarks>If <paramref name="culture"/> is null, <see cref="CultureInfo.CurrentCulture"/> will be used.</remarks>
         /// <returns>The number of characters written into the destination span. If the destination is too small, returns -1.</returns>
         /// <exception cref="InvalidOperationException">The source and destination buffers overlap.</exception>
         public static int ToUpper(this ReadOnlySpan<char> source, Span<char> destination, CultureInfo? culture)
         {
             if (source.Overlaps(destination))
-                throw new InvalidOperationException(SR.InvalidOperation_SpanOverlappedOperation);
+                ThrowHelper.ThrowInvalidOperationException(ExceptionResource.InvalidOperation_SpanOverlappedOperation);
 
             culture ??= CultureInfo.CurrentCulture;
 
@@ -275,7 +275,7 @@ namespace System
         public static int ToUpperInvariant(this ReadOnlySpan<char> source, Span<char> destination)
         {
             if (source.Overlaps(destination))
-                throw new InvalidOperationException(SR.InvalidOperation_SpanOverlappedOperation);
+                ThrowHelper.ThrowInvalidOperationException(ExceptionResource.InvalidOperation_SpanOverlappedOperation);
 
             // Assuming that changing case does not affect length
             if (destination.Length < source.Length)
@@ -294,6 +294,7 @@ namespace System
         /// <param name="span">The source span.</param>
         /// <param name="value">The sequence to compare to the end of the source span.</param>
         /// <param name="comparisonType">One of the enumeration values that determines how the <paramref name="span"/> and <paramref name="value"/> are compared.</param>
+        [Intrinsic] // Unrolled and vectorized for half-constant input (Ordinal)
         public static bool EndsWith(this ReadOnlySpan<char> span, ReadOnlySpan<char> value, StringComparison comparisonType)
         {
             string.CheckStringComparison(comparisonType);
@@ -377,6 +378,7 @@ namespace System
         /// <remarks>
         /// Invalid sequences will be represented in the enumeration by <see cref="Rune.ReplacementChar"/>.
         /// </remarks>
+        [OverloadResolutionPriority(-1)]
         public static SpanRuneEnumerator EnumerateRunes(this Span<char> span)
         {
             return new SpanRuneEnumerator(span);
@@ -403,6 +405,7 @@ namespace System
         /// for <see cref="string.ReplaceLineEndings"/> for more information on how newline
         /// sequences are detected.
         /// </remarks>
+        [OverloadResolutionPriority(-1)]
         public static SpanLineEnumerator EnumerateLines(this Span<char> span)
         {
             return new SpanLineEnumerator(span);

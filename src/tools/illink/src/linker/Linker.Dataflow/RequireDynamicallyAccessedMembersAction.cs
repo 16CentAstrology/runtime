@@ -9,22 +9,25 @@ using Mono.Linker.Dataflow;
 
 namespace ILLink.Shared.TrimAnalysis
 {
-	partial struct RequireDynamicallyAccessedMembersAction
+	internal partial struct RequireDynamicallyAccessedMembersAction
 	{
+		readonly ITryResolveMetadata _resolver;
 		readonly ReflectionMarker _reflectionMarker;
 
 		public RequireDynamicallyAccessedMembersAction (
+			ITryResolveMetadata resolver,
 			ReflectionMarker reflectionMarker,
 			in DiagnosticContext diagnosticContext)
 		{
+			_resolver = resolver;
 			_reflectionMarker = reflectionMarker;
 			_diagnosticContext = diagnosticContext;
 		}
 
 		public partial bool TryResolveTypeNameAndMark (string typeName, bool needsAssemblyName, out TypeProxy type)
 		{
-			if (_reflectionMarker.TryResolveTypeNameAndMark (typeName, _diagnosticContext, needsAssemblyName, out TypeDefinition? foundType)) {
-				type = new (foundType);
+			if (_reflectionMarker.TryResolveTypeNameAndMark (typeName, _diagnosticContext, needsAssemblyName, out TypeReference? foundType)) {
+				type = new (foundType, _resolver);
 				return true;
 			} else {
 				type = default;

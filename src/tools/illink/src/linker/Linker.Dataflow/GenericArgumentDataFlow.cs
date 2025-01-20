@@ -30,14 +30,14 @@ namespace Mono.Linker.Dataflow
 
 			MultiValue genericArgumentValue = _context.Annotations.FlowAnnotations.GetTypeValueFromGenericArgument (genericArgument);
 
-			var diagnosticContext = new DiagnosticContext (_origin, !_context.Annotations.ShouldSuppressAnalysisWarningsForRequiresUnreferencedCode (_origin.Provider), _context);
+			var diagnosticContext = new DiagnosticContext (_origin, !_context.Annotations.ShouldSuppressAnalysisWarningsForRequiresUnreferencedCode (_origin.Provider, out _), _context);
 			RequireDynamicallyAccessedMembers (diagnosticContext, genericArgumentValue, genericParameterValue);
 		}
 
 		void RequireDynamicallyAccessedMembers (in DiagnosticContext diagnosticContext, in MultiValue value, ValueWithDynamicallyAccessedMembers targetValue)
 		{
 			var reflectionMarker = new ReflectionMarker (_context, _markStep, enabled: true);
-			var requireDynamicallyAccessedMembersAction = new RequireDynamicallyAccessedMembersAction (reflectionMarker, diagnosticContext);
+			var requireDynamicallyAccessedMembersAction = new RequireDynamicallyAccessedMembersAction (_context, reflectionMarker, diagnosticContext);
 			requireDynamicallyAccessedMembersAction.Invoke (value, targetValue);
 		}
 	}

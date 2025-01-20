@@ -8,7 +8,7 @@ using Mono.Cecil;
 
 namespace Mono.Linker
 {
-	internal static class MethodReferenceExtensions
+	public static class MethodReferenceExtensions
 	{
 		public static string GetDisplayName (this MethodReference method)
 		{
@@ -42,7 +42,7 @@ namespace Mono.Linker
 			}
 
 			// Append parameters
-			sb.Append ("(");
+			sb.Append ('(');
 			if (method.HasMetadataParameters ()) {
 #pragma warning disable RS0030 // MethodReference.Parameters is banned -- it's best to leave this as is for now
 				for (int i = 0; i < method.Parameters.Count - 1; i++)
@@ -51,7 +51,7 @@ namespace Mono.Linker
 #pragma warning restore RS0030 // Do not used banned APIs
 			}
 
-			sb.Append (")");
+			sb.Append (')');
 
 			// Insert generic parameters
 			if (method.HasGenericParameters) {
@@ -71,10 +71,10 @@ namespace Mono.Linker
 			return sb.ToString ();
 		}
 
-		public static TypeReference? GetReturnType (this MethodReference method, LinkContext context)
+		public static TypeReference GetReturnType (this MethodReference method)
 		{
 			if (method.DeclaringType is GenericInstanceType genericInstance)
-				return TypeReferenceExtensions.InflateGenericType (genericInstance, method.ReturnType, context);
+				return TypeReferenceExtensions.InflateGenericType (genericInstance, method.ReturnType);
 
 			return method.ReturnType;
 		}
@@ -84,13 +84,13 @@ namespace Mono.Linker
 			return method.ReturnType.WithoutModifiers ().MetadataType == MetadataType.Void;
 		}
 
-		public static TypeReference? GetInflatedParameterType (this MethodReference method, int parameterIndex, LinkContext context)
+		public static TypeReference GetInflatedParameterType (this MethodReference method, int parameterIndex)
 		{
 #pragma warning disable RS0030 // MethodReference.Parameters is banned -- it's best to leave this as is for now
-			if (method.DeclaringType is GenericInstanceType genericInstance)
-				return TypeReferenceExtensions.InflateGenericType (genericInstance, method.Parameters[parameterIndex].ParameterType, context);
-
-			return method.Parameters[parameterIndex].ParameterType;
+			IGenericInstance? genericInstance = method as IGenericInstance ?? method.DeclaringType as IGenericInstance;
+			if (genericInstance is null)
+				return method.Parameters[parameterIndex].ParameterType;
+			return TypeReferenceExtensions.InflateGenericType (genericInstance, method.Parameters[parameterIndex].ParameterType);
 #pragma warning restore RS0030 // Do not used banned APIs
 		}
 
@@ -103,13 +103,13 @@ namespace Mono.Linker
 #pragma warning restore RS0030 // Do not used banned APIs
 
 		/// <summary>
-		/// Returns true if the method has any parameters in the .parameters section of the method's metadata
+		/// Returns true if the method has any parameters in the .parameters section of the method's metadata (i.e. excludes the impicit 'this')
 		/// </summary>
 		public static bool HasMetadataParameters (this MethodReference method)
 			=> method.GetMetadataParametersCount () != 0;
 
 		/// <summary>
-		/// Returns a list of the parameters in the method's 'parameters' metadata section (i.e. excluding the implicit 'this' parameter)
+		/// Returns the number of the parameters pushed before the method's call (i.e. including the implicit 'this' if present)
 		/// </summary>
 #pragma warning disable RS0030 // MethodReference.Parameters is banned -- this provides a wrapper
 		public static int GetParametersCount (this MethodReference method)

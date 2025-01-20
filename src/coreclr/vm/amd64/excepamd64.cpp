@@ -48,12 +48,14 @@ inline PTR_CONTEXT GetCONTEXTFromRedirectedStubStackFrameWorker(UINT_PTR establi
     return *ppContext;
 }
 
+#ifdef TARGET_WINDOWS
 PTR_CONTEXT GetCONTEXTFromRedirectedStubStackFrame(DISPATCHER_CONTEXT * pDispatcherContext)
 {
     LIMITED_METHOD_DAC_CONTRACT;
 
     return GetCONTEXTFromRedirectedStubStackFrameWorker(pDispatcherContext->EstablisherFrame);
 }
+#endif // TARGET_WINDOWS
 
 PTR_CONTEXT GetCONTEXTFromRedirectedStubStackFrame(CONTEXT * pContext)
 {
@@ -63,17 +65,14 @@ PTR_CONTEXT GetCONTEXTFromRedirectedStubStackFrame(CONTEXT * pContext)
 }
 
 #if !defined(DACCESS_COMPILE)
-
+#ifdef TARGET_WINDOWS
 FaultingExceptionFrame *GetFrameFromRedirectedStubStackFrame (DISPATCHER_CONTEXT *pDispatcherContext)
 {
     LIMITED_METHOD_CONTRACT;
 
     return (FaultingExceptionFrame*)(pDispatcherContext->EstablisherFrame + THROWSTUB_ESTABLISHER_OFFSET_FaultingExceptionFrame);
 }
-
-#endif // !DACCESS_COMPILE
-
-#if !defined(DACCESS_COMPILE)
+#endif // TARGET_WINDOWS
 
 #define AMD64_SIZE64_PREFIX 0x48
 #define AMD64_ADD_IMM8_OP 0x83
@@ -200,7 +199,7 @@ RtlVirtualUnwind_Worker (
     BOOL     InEpilogue = FALSE;
     BOOL     HasManagedBreakpoint = FALSE;
     BOOL     HasUnmanagedBreakpoint = FALSE;
-    UCHAR    TempOpcode = NULL;
+    UCHAR    TempOpcode = 0;
     PUCHAR   NextByte;
     ULONG    CurrentOffset;
     ULONG    FrameRegister;
@@ -600,10 +599,9 @@ AdjustContextForVirtualStub(
 
     PCODE f_IP = GetIP(pContext);
 
-    VirtualCallStubManager::StubKind sk;
-    VirtualCallStubManager::FindStubManager(f_IP, &sk);
+    StubCodeBlockKind sk = RangeSectionStubManager::GetStubKind(f_IP);
 
-    if (sk == VirtualCallStubManager::SK_DISPATCH)
+    if (sk == STUB_CODE_BLOCK_VSD_DISPATCH_STUB)
     {
         if ((*PTR_DWORD(f_IP) & 0xffffff) != X64_INSTR_CMP_IND_THIS_REG_RAX) // cmp [THIS_REG], rax
         {
@@ -612,7 +610,7 @@ AdjustContextForVirtualStub(
         }
     }
     else
-    if (sk == VirtualCallStubManager::SK_RESOLVE)
+    if (sk == STUB_CODE_BLOCK_VSD_RESOLVE_STUB)
     {
         if ((*PTR_DWORD(f_IP) & 0xffffff) != X64_INSTR_MOV_RAX_IND_THIS_REG) // mov rax, [THIS_REG]
         {

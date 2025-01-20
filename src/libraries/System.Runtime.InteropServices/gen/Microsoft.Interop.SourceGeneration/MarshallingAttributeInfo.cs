@@ -1,13 +1,9 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using Microsoft.CodeAnalysis;
-using System;
-using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.Diagnostics;
-using System.Linq;
-using System.Runtime.InteropServices;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 
 namespace Microsoft.Interop
 {
@@ -50,16 +46,6 @@ namespace Microsoft.Interop
 
         private NoMarshallingInfo() { }
     }
-
-    /// <summary>
-    /// Marshalling information is lacking because of support not because it is
-    /// unknown or non-existent.
-    /// </summary>
-    /// <remarks>
-    /// An indication of "missing support" will trigger the fallback logic, which is
-    /// the forwarder marshaller.
-    /// </remarks>
-    public record MissingSupportMarshallingInfo : MarshallingInfo;
 
     /// <summary>
     /// Character encoding enumeration.
@@ -134,13 +120,39 @@ namespace Microsoft.Interop
             Marshallers);
 
     /// <summary>
-    /// Marshalling information is lacking because of support not because it is
-    /// unknown or non-existent. Includes information about element types in case
-    /// we need to rehydrate the marshalling info into an attribute for the fallback marshaller.
+    /// Marshal an exception based on the same rules as the built-in COM system based on the unmanaged type of the native return marshaller.
     /// </summary>
-    /// <remarks>
-    /// An indication of "missing support" will trigger the fallback logic, which is
-    /// the forwarder marshaller.
-    /// </remarks>
-    public sealed record MissingSupportCollectionMarshallingInfo(CountInfo CountInfo, MarshallingInfo ElementMarshallingInfo) : MissingSupportMarshallingInfo;
+    public sealed record ComExceptionMarshalling : MarshallingInfo
+    {
+        internal static MarshallingInfo CreateSpecificMarshallingInfo(ManagedTypeInfo unmanagedReturnType)
+        {
+            return (unmanagedReturnType as SpecialTypeInfo)?.SpecialType switch
+            {
+                SpecialType.System_Void => CreateWellKnownComExceptionMarshallingData(TypeNames.ExceptionAsVoidMarshaller, unmanagedReturnType),
+                SpecialType.System_Int32 => CreateWellKnownComExceptionMarshallingData($"{TypeNames.ExceptionAsHResultMarshaller}<int>", unmanagedReturnType),
+                SpecialType.System_UInt32 => CreateWellKnownComExceptionMarshallingData($"{TypeNames.ExceptionAsHResultMarshaller}<uint>", unmanagedReturnType),
+                SpecialType.System_Single => CreateWellKnownComExceptionMarshallingData($"{TypeNames.ExceptionAsNaNMarshaller}<float>", unmanagedReturnType),
+                SpecialType.System_Double => CreateWellKnownComExceptionMarshallingData($"{TypeNames.ExceptionAsNaNMarshaller}<double>", unmanagedReturnType),
+                _ => CreateWellKnownComExceptionMarshallingData($"{TypeNames.ExceptionAsDefaultMarshaller}<{MarshallerHelpers.GetCompatibleGenericTypeParameterSyntax(SyntaxFactory.ParseTypeName(unmanagedReturnType.FullTypeName))}>", unmanagedReturnType),
+            };
+
+            static NativeMarshallingAttributeInfo CreateWellKnownComExceptionMarshallingData(string marshallerName, ManagedTypeInfo unmanagedType)
+            {
+                ManagedTypeInfo marshallerTypeInfo = new ReferenceTypeInfo(TypeNames.GlobalAlias + marshallerName, marshallerName);
+                return new NativeMarshallingAttributeInfo(marshallerTypeInfo,
+                    new CustomTypeMarshallers(ImmutableDictionary<MarshalMode, CustomTypeMarshallerData>.Empty.Add(
+                        MarshalMode.UnmanagedToManagedOut,
+                        new CustomTypeMarshallerData(
+                            marshallerTypeInfo,
+                            unmanagedType,
+                            HasState: false,
+                            MarshallerShape.ToUnmanaged,
+                            IsStrictlyBlittable: true,
+                            BufferElementType: null,
+                            CollectionElementType: null,
+                            CollectionElementMarshallingInfo: null
+                            ))));
+            }
+        }
+    }
 }

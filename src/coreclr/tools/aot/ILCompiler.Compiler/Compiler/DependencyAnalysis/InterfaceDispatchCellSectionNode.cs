@@ -86,7 +86,7 @@ namespace ILCompiler.DependencyAnalysis
         }
 
         public void AppendMangledName(NameMangler nameMangler, Utf8StringBuilder sb)
-            => sb.Append(nameMangler.CompilationUnitPrefix).Append("__InterfaceDispatchCellSection_Start");
+            => sb.Append(nameMangler.CompilationUnitPrefix).Append("__InterfaceDispatchCellSection_Start"u8);
         protected override ObjectNodeSection GetDehydratedSection(NodeFactory factory) => ObjectNodeSection.DataSection;
         protected override string GetName(NodeFactory factory) => this.GetMangledName(factory.NameMangler);
 
@@ -104,7 +104,7 @@ namespace ILCompiler.DependencyAnalysis
         private sealed class DispatchCellComparer : IComparer<InterfaceDispatchCellNode>
         {
             private readonly NodeFactory _factory;
-            private readonly TypeSystemComparer _comparer = TypeSystemComparer.Instance;
+            private readonly CompilerComparer _comparer = CompilerComparer.Instance;
 
             public DispatchCellComparer(NodeFactory factory)
             {
@@ -130,7 +130,7 @@ namespace ILCompiler.DependencyAnalysis
                 if (result != 0)
                     return result;
 
-                result = StringComparer.Ordinal.Compare(x.CallSiteIdentifier, y.CallSiteIdentifier);
+                result = _comparer.Compare(x.CallSiteIdentifier, y.CallSiteIdentifier);
                 if (result != 0)
                     return result;
 

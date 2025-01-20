@@ -13,7 +13,7 @@ namespace System.Text.Json.SourceGeneration.Tests
     public sealed class ReferenceHandlerTests_Metadata_String : ReferenceHandlerTests_Metadata
     {
         public ReferenceHandlerTests_Metadata_String()
-            : base(new StringSerializerWrapper(ReferenceHandlerTestsContext_Metadata.Default, (options) => new ReferenceHandlerTestsContext_Metadata(options)))
+            : base(new StringSerializerWrapper(ReferenceHandlerTestsContext_Metadata.Default))
         {
         }
     }
@@ -21,7 +21,7 @@ namespace System.Text.Json.SourceGeneration.Tests
     public sealed class ReferenceHandlerTests_Metadata_AsyncStream : ReferenceHandlerTests_Metadata
     {
         public ReferenceHandlerTests_Metadata_AsyncStream()
-            : base(new AsyncStreamSerializerWrapper(ReferenceHandlerTestsContext_Metadata.Default, (options) => new ReferenceHandlerTestsContext_Metadata(options)))
+            : base(new AsyncStreamSerializerWrapper(ReferenceHandlerTestsContext_Metadata.Default))
         {
         }
     }
@@ -135,6 +135,10 @@ namespace System.Text.Json.SourceGeneration.Tests
         [JsonSerializable(typeof(LinkedList<object[]>))]
         [JsonSerializable(typeof(LinkedList<Base[]>))]
         [JsonSerializable(typeof(LinkedList<Base[][]>))]
+        [JsonSerializable(typeof(ClassWithConflictingRefProperty))]
+        [JsonSerializable(typeof(ClassWithConflictingIdProperty))]
+        [JsonSerializable(typeof(ClassWithIgnoredConflictingProperty))]
+        [JsonSerializable(typeof(ClassWithExtensionDataConflictingProperty))]
         internal sealed partial class ReferenceHandlerTestsContext_Metadata : JsonSerializerContext
         {
         }
@@ -143,7 +147,7 @@ namespace System.Text.Json.SourceGeneration.Tests
     public sealed class ReferenceHandlerTests_Default_String : ReferenceHandlerTests_Default
     {
         public ReferenceHandlerTests_Default_String()
-            : base(new StringSerializerWrapper(ReferenceHandlerTestsContext_Default.Default, (options) => new ReferenceHandlerTestsContext_Default(options)))
+            : base(new StringSerializerWrapper(ReferenceHandlerTestsContext_Default.Default))
         {
         }
 
@@ -160,7 +164,7 @@ namespace System.Text.Json.SourceGeneration.Tests
     public sealed class ReferenceHandlerTests_Default_AsyncStream : ReferenceHandlerTests_Default
     {
         public ReferenceHandlerTests_Default_AsyncStream()
-            : base(new AsyncStreamSerializerWrapper(ReferenceHandlerTestsContext_Default.Default, (options) => new ReferenceHandlerTestsContext_Default(options)))
+            : base(new AsyncStreamSerializerWrapper(ReferenceHandlerTestsContext_Default.Default))
         {
         }
     }
@@ -273,6 +277,10 @@ namespace System.Text.Json.SourceGeneration.Tests
         [JsonSerializable(typeof(LinkedList<object[]>))]
         [JsonSerializable(typeof(LinkedList<Base[]>))]
         [JsonSerializable(typeof(LinkedList<Base[][]>))]
+        [JsonSerializable(typeof(ClassWithConflictingRefProperty))]
+        [JsonSerializable(typeof(ClassWithConflictingIdProperty))]
+        [JsonSerializable(typeof(ClassWithIgnoredConflictingProperty))]
+        [JsonSerializable(typeof(ClassWithExtensionDataConflictingProperty))]
         internal sealed partial class ReferenceHandlerTestsContext_Default : JsonSerializerContext
         {
         }
